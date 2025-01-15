@@ -1,14 +1,16 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Reflection;
+using System.Threading;
 using BenchmarkDotNet.Characteristics;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Environments;
+using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Portability;
-using BenchmarkDotNet.Toolchains.NativeAot;
+using BenchmarkDotNet.Toolchains;
 using BenchmarkDotNet.Toolchains.CsProj;
+using BenchmarkDotNet.Toolchains.DotNetCli;
 using BenchmarkDotNet.Toolchains.MonoWasm;
 using BenchmarkDotNet.Toolchains.Roslyn;
 using JetBrains.Annotations;
@@ -17,12 +19,20 @@ namespace BenchmarkDotNet.Running
 {
     public class BuildPartition
     {
+        // We use an auto-increment global counter instead of Guid to guarantee uniqueness per benchmark run (Guid has a small chance to collide),
+        // assuming there are fewer than 4 billion build partitions (a safe assumption).
+        internal static int s_partitionCounter;
+
         public BuildPartition(BenchmarkBuildInfo[] benchmarks, IResolver resolver)
         {
             Resolver = resolver;
             RepresentativeBenchmarkCase = benchmarks[0].BenchmarkCase;
             Benchmarks = benchmarks;
-            ProgramName = benchmarks[0].Config.Options.IsSet(ConfigOptions.KeepBenchmarkFiles) ? RepresentativeBenchmarkCase.Job.FolderInfo : Guid.NewGuid().ToString();
+            // Combine the benchmark's assembly name, folder info, and build partition id.
+            string benchmarkAssemblyName = RepresentativeBenchmarkCase.Descriptor.Type.Assembly.GetName().Name;
+            string folderInfo = RepresentativeBenchmarkCase.Job.FolderInfo;
+            int id = Interlocked.Increment(ref s_partitionCounter);
+            ProgramName = $"{benchmarkAssemblyName}-{folderInfo}-{id}";
             LogBuildOutput = benchmarks[0].Config.Options.IsSet(ConfigOptions.LogBuildOutput);
             GenerateMSBuildBinLog = benchmarks[0].Config.Options.IsSet(ConfigOptions.GenerateMSBuildBinLog);
         }
@@ -51,7 +61,7 @@ namespace BenchmarkDotNet.Running
         public bool IsNativeAot => RepresentativeBenchmarkCase.Job.IsNativeAOT();
 
         public bool IsWasm => Runtime is WasmRuntime // given job can have Wasm toolchain set, but Runtime == default ;)
-            || (RepresentativeBenchmarkCase.Job.Infrastructure.TryGetToolchain(out var toolchain) && toolchain is WasmToolChain);
+            || (RepresentativeBenchmarkCase.Job.Infrastructure.TryGetToolchain(out var toolchain) && toolchain is WasmToolchain);
 
         public bool IsNetFramework => Runtime is ClrRuntime
             || (RepresentativeBenchmarkCase.Job.Infrastructure.TryGetToolchain(out var toolchain) && (toolchain is RoslynToolchain || toolchain is CsProjClassicNetToolchain));
@@ -74,5 +84,20 @@ namespace BenchmarkDotNet.Running
             // in case of SingleFile, location.Length returns 0, so we use GetName() and
             // manually construct the path.
             assembly.Location.Length == 0 ? Path.Combine(AppContext.BaseDirectory, assembly.GetName().Name) : assembly.Location;
+
+        internal bool ForcedNoDependenciesForIntegrationTests
+        {
+            get
+            {
+                if (!XUnitHelper.IsIntegrationTest.Value || !RuntimeInformation.IsNetCore)
+                    return false;
+
+                var job = RepresentativeBenchmarkCase.Job;
+                if (job.GetToolchain().Builder is not DotNetCliBuilder)
+                    return false;
+
+                return !job.HasDynamicBuildCharacteristic();
+            }
+        }
     }
 }

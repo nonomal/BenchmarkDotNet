@@ -57,22 +57,27 @@ namespace BenchmarkDotNet.Jobs
         /// <summary>
         /// .NET Core 2.0
         /// </summary>
-        NetCoreApp20,
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        // Assigning explicit values so we can check for them without the compiler erroring.
+        NetCoreApp20 = 10,
 
         /// <summary>
         /// .NET Core 2.1
         /// </summary>
-        NetCoreApp21,
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        NetCoreApp21 = 11,
 
         /// <summary>
         /// .NET Core 2.2
         /// </summary>
-        NetCoreApp22,
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        NetCoreApp22 = 12,
 
         /// <summary>
         /// .NET Core 3.0
         /// </summary>
-        NetCoreApp30,
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        NetCoreApp30 = 13,
 
         /// <summary>
         /// .NET Core 3.1
@@ -101,6 +106,21 @@ namespace BenchmarkDotNet.Jobs
         Net70,
 
         /// <summary>
+        /// .NET 8.0
+        /// </summary>
+        Net80,
+
+        /// <summary>
+        /// .NET 9.0
+        /// </summary>
+        Net90,
+
+        /// <summary>
+        /// .NET 10.0
+        /// </summary>
+        Net10_0,
+
+        /// <summary>
         /// NativeAOT compiled as net6.0
         /// </summary>
         NativeAot60,
@@ -111,24 +131,54 @@ namespace BenchmarkDotNet.Jobs
         NativeAot70,
 
         /// <summary>
+        /// NativeAOT compiled as net8.0
+        /// </summary>
+        NativeAot80,
+
+        /// <summary>
+        /// NativeAOT compiled as net9.0
+        /// </summary>
+        NativeAot90,
+
+        /// <summary>
+        /// NativeAOT compiled as net10.0
+        /// </summary>
+        NativeAot10_0,
+
+        /// <summary>
         /// WebAssembly with default .Net version
         /// </summary>
         Wasm,
 
         /// <summary>
-        /// WebAssembly with .net5.0
+        /// WebAssembly with net5.0
         /// </summary>
         WasmNet50,
 
         /// <summary>
-        /// WebAssembly with .net6.0
+        /// WebAssembly with net6.0
         /// </summary>
         WasmNet60,
 
         /// <summary>
-        /// WebAssembly with .net7.0
+        /// WebAssembly with net7.0
         /// </summary>
         WasmNet70,
+
+        /// <summary>
+        /// WebAssembly with net8.0
+        /// </summary>
+        WasmNet80,
+
+        /// <summary>
+        /// WebAssembly with net9.0
+        /// </summary>
+        WasmNet90,
+
+        /// <summary>
+        /// WebAssembly with net10.0
+        /// </summary>
+        WasmNet10_0,
 
         /// <summary>
         /// Mono with the Ahead of Time LLVM Compiler backend
@@ -136,13 +186,53 @@ namespace BenchmarkDotNet.Jobs
         MonoAOTLLVM,
 
         /// <summary>
-        /// Mono with the Ahead of Time LLVM Compiler backend and .net6.0
+        /// Mono with the Ahead of Time LLVM Compiler backend and net6.0
         /// </summary>
         MonoAOTLLVMNet60,
 
         /// <summary>
-        /// Mono with the Ahead of Time LLVM Compiler backend and .net7.0
+        /// Mono with the Ahead of Time LLVM Compiler backend and net7.0
         /// </summary>
-        MonoAOTLLVMNet70
+        MonoAOTLLVMNet70,
+
+        /// <summary>
+        /// Mono with the Ahead of Time LLVM Compiler backend and net8.0
+        /// </summary>
+        MonoAOTLLVMNet80,
+
+        /// <summary>
+        /// Mono with the Ahead of Time LLVM Compiler backend and net9.0
+        /// </summary>
+        MonoAOTLLVMNet90,
+
+        /// <summary>
+        /// Mono with the Ahead of Time LLVM Compiler backend and net10.0
+        /// </summary>
+        MonoAOTLLVMNet10_0,
+
+        /// <summary>
+        /// .NET 6 using MonoVM (not CLR which is the default)
+        /// </summary>
+        Mono60,
+
+        /// <summary>
+        /// .NET 7 using MonoVM (not CLR which is the default)
+        /// </summary>
+        Mono70,
+
+        /// <summary>
+        /// .NET 8 using MonoVM (not CLR which is the default)
+        /// </summary>
+        Mono80,
+
+        /// <summary>
+        /// .NET 9 using MonoVM (not CLR which is the default)
+        /// </summary>
+        Mono90,
+
+        /// <summary>
+        /// .NET 10 using MonoVM (not CLR which is the default)
+        /// </summary>
+        Mono10_0,
     }
 }

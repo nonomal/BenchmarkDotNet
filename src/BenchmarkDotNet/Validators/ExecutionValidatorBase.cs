@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Extensions;
+using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Running;
 
 namespace BenchmarkDotNet.Validators
@@ -52,7 +53,7 @@ namespace BenchmarkDotNet.Validators
             return errors;
         }
 
-        private bool TryCreateBenchmarkTypeInstance(Type type, List<ValidationError> errors, out object instance)
+        private bool TryCreateBenchmarkTypeInstance(Type type, List<ValidationError> errors, out object? instance)
         {
             try
             {
@@ -130,21 +131,8 @@ namespace BenchmarkDotNet.Validators
                 return;
             }
 
-            var returnType = result.GetType();
-            if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(ValueTask<>))
-            {
-                var asTaskMethod = result.GetType().GetMethod("AsTask");
-                result = asTaskMethod.Invoke(result, null);
-            }
-
-            if (result is Task task)
-            {
-                task.GetAwaiter().GetResult();
-            }
-            else if (result is ValueTask valueTask)
-            {
-                valueTask.GetAwaiter().GetResult();
-            }
+            AwaitHelper.GetGetResultMethod(result.GetType())
+                ?.Invoke(null, new[] { result });
         }
 
         private bool TryToSetParamsFields(object benchmarkTypeInstance, List<ValidationError> errors)

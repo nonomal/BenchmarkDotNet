@@ -30,7 +30,7 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
             ),
         };
 
-        internal static bool TryToExplainFailureReason(BuildResult buildResult, out string reason)
+        internal static bool TryToExplainFailureReason(BuildResult buildResult, out string? reason)
         {
             reason = null;
 
@@ -69,6 +69,8 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
                     return "net472";
                 case ".NETFramework,Version=v4.8":
                     return "net48";
+                case ".NETFramework,Version=v4.8.1":
+                    return "net481";
                 case ".NETCoreApp,Version=v2.0":
                     return "netcoreapp2.0";
                 case ".NETCoreApp,Version=v2.1":
@@ -83,6 +85,14 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
                     return "net5.0";
                 case ".NETCoreApp,Version=v6.0":
                     return "net6.0";
+                case ".NETCoreApp,Version=v7.0":
+                    return "net7.0";
+                case ".NETCoreApp,Version=v8.0":
+                    return "net8.0";
+                case ".NETCoreApp,Version=v9.0":
+                    return "net9.0";
+                case ".NETCoreApp,Version=v10.0":
+                    return "net10.0";
                 default:
                     return capture.Value; // we don't want to throw for future versions of .NET
             }

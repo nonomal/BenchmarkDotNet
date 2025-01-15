@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Extensions;
@@ -64,7 +65,8 @@ namespace BenchmarkDotNet.Disassemblers
         internal static Platform GetDisassemblerArchitecture(Process process, Platform platform)
             => platform switch
             {
-                Platform.AnyCpu => NativeMethods.Is64Bit(process) ? Platform.X64 : Platform.X86, // currently ARM is not supported
+                Platform.AnyCpu when System.Runtime.InteropServices.RuntimeInformation.OSArchitecture is Architecture.Arm or Architecture.Arm64 => RuntimeInformation.GetCurrentPlatform(),
+                Platform.AnyCpu => NativeMethods.Is64Bit(process) ? Platform.X64 : Platform.X86,
                 _ => platform
             };
 
@@ -85,15 +87,18 @@ namespace BenchmarkDotNet.Disassemblers
             var dir = new FileInfo(assemblyWithDisassemblersInResources.Location).Directory ?? throw new DirectoryNotFoundException();
             string disassemblerPath = Path.Combine(
                 dir.FullName,
-                FolderNameHelper.ToFolderName(BenchmarkDotNetInfo.FullVersion), // possible update
+                FolderNameHelper.ToFolderName(BenchmarkDotNetInfo.Instance.FullVersion), // possible update
                 exeName); // separate process per architecture!!
 
             Path.GetDirectoryName(disassemblerPath).CreateIfNotExists();
 
-#if !PRERELEASE_DEVELOP // for development we always want to copy the file to not omit any dev changes (Properties.BenchmarkDotNetInfo.FullVersion in file name is not enough)
-            if (File.Exists(disassemblerPath))
-                return disassemblerPath;
-#endif
+            // for development we always want to copy the file to not omit any dev changes
+            if (!BenchmarkDotNetInfo.Instance.IsDevelop)
+            {
+                if (File.Exists(disassemblerPath))
+                    return disassemblerPath;
+            }
+
             // the disassembler has not been yet retrieved from the resources
             CopyFromResources(
                 assemblyWithDisassemblersInResources,
@@ -143,6 +148,10 @@ namespace BenchmarkDotNet.Disassemblers
                 .Append(config.MaxDepth).Append(' ')
                 .Append(Escape(resultsPath))
                 .Append(' ')
+                .Append(config.Syntax.ToString())
+                .Append(' ')
+                .Append(parameters.BenchmarkCase.Job.Environment.GetRuntime().MsBuildMoniker)
+                .Append(' ')
                 .Append(string.Join(" ", config.Filters.Select(Escape)))
                 .ToString();
 
@@ -157,7 +166,7 @@ namespace BenchmarkDotNet.Disassemblers
                 if (Environment.GetEnvironmentVariable("PROCESSOR_ARCHITECTURE") == "x86")
                     return false;
 
-                if (RuntimeInformation.IsWindows())
+                if (OsDetector.IsWindows())
                 {
                     IsWow64Process(process.Handle, out bool isWow64);
 

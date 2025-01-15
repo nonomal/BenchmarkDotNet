@@ -11,16 +11,23 @@ namespace BenchmarkDotNet.Environments
 {
     public class CoreRuntime : Runtime
     {
-        public static readonly CoreRuntime Core20 = new CoreRuntime(RuntimeMoniker.NetCoreApp20, "netcoreapp2.0", ".NET Core 2.0");
-        public static readonly CoreRuntime Core21 = new CoreRuntime(RuntimeMoniker.NetCoreApp21, "netcoreapp2.1", ".NET Core 2.1");
-        public static readonly CoreRuntime Core22 = new CoreRuntime(RuntimeMoniker.NetCoreApp22, "netcoreapp2.2", ".NET Core 2.2");
-        public static readonly CoreRuntime Core30 = new CoreRuntime(RuntimeMoniker.NetCoreApp30, "netcoreapp3.0", ".NET Core 3.0");
-        public static readonly CoreRuntime Core31 = new CoreRuntime(RuntimeMoniker.NetCoreApp31, "netcoreapp3.1", ".NET Core 3.1");
-        public static readonly CoreRuntime Core50 = new CoreRuntime(RuntimeMoniker.Net50, "net5.0", ".NET 5.0");
-        public static readonly CoreRuntime Core60 = new CoreRuntime(RuntimeMoniker.Net60, "net6.0", ".NET 6.0");
-        public static readonly CoreRuntime Core70 = new CoreRuntime(RuntimeMoniker.Net70, "net7.0", ".NET 7.0");
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        public static readonly CoreRuntime Core20 = new (RuntimeMoniker.NetCoreApp20, "netcoreapp2.0", ".NET Core 2.0");
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        public static readonly CoreRuntime Core21 = new (RuntimeMoniker.NetCoreApp21, "netcoreapp2.1", ".NET Core 2.1");
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        public static readonly CoreRuntime Core22 = new (RuntimeMoniker.NetCoreApp22, "netcoreapp2.2", ".NET Core 2.2");
+        [Obsolete("This runtime is no longer supported. Use a newer runtime or use BenchmarkDotNet v0.14.X or older.", true)]
+        public static readonly CoreRuntime Core30 = new (RuntimeMoniker.NetCoreApp30, "netcoreapp3.0", ".NET Core 3.0");
+        public static readonly CoreRuntime Core31 = new (RuntimeMoniker.NetCoreApp31, "netcoreapp3.1", ".NET Core 3.1");
+        public static readonly CoreRuntime Core50 = new (RuntimeMoniker.Net50, "net5.0", ".NET 5.0");
+        public static readonly CoreRuntime Core60 = new (RuntimeMoniker.Net60, "net6.0", ".NET 6.0");
+        public static readonly CoreRuntime Core70 = new (RuntimeMoniker.Net70, "net7.0", ".NET 7.0");
+        public static readonly CoreRuntime Core80 = new (RuntimeMoniker.Net80, "net8.0", ".NET 8.0");
+        public static readonly CoreRuntime Core90 = new (RuntimeMoniker.Net90, "net9.0", ".NET 9.0");
+        public static readonly CoreRuntime Core10_0 = new (RuntimeMoniker.Net10_0, "net10.0", ".NET 10.0");
 
-        public static CoreRuntime Latest => Core70; // when dotnet/runtime branches for 8.0, this will need to get updated
+        public static CoreRuntime Latest => Core10_0; // when dotnet/runtime branches for 11.0, this will need to get updated
 
         private CoreRuntime(RuntimeMoniker runtimeMoniker, string msBuildMoniker, string displayName)
             : base(runtimeMoniker, msBuildMoniker, displayName)
@@ -30,9 +37,9 @@ namespace BenchmarkDotNet.Environments
         public bool IsPlatformSpecific => MsBuildMoniker.IndexOf('-') > 0;
 
         /// <summary>
-        /// use this method if you want to target .NET Core version not supported by current version of BenchmarkDotNet. Example: .NET Core 10
+        /// use this method if you want to target .NET version not supported by current version of BenchmarkDotNet. Example: .NET 10
         /// </summary>
-        /// <param name="msBuildMoniker">msbuild moniker, example: netcoreapp10.0</param>
+        /// <param name="msBuildMoniker">msbuild moniker, example: net10.0</param>
         /// <param name="displayName">display name used by BDN to print the results</param>
         /// <returns>new runtime information</returns>
         public static CoreRuntime CreateForNewVersion(string msBuildMoniker, string displayName)
@@ -62,20 +69,21 @@ namespace BenchmarkDotNet.Environments
         {
             switch (version)
             {
-                case Version v when v.Major == 2 && v.Minor == 0: return Core20;
-                case Version v when v.Major == 2 && v.Minor == 1: return Core21;
-                case Version v when v.Major == 2 && v.Minor == 2: return Core22;
-                case Version v when v.Major == 3 && v.Minor == 0: return Core30;
                 case Version v when v.Major == 3 && v.Minor == 1: return Core31;
                 case Version v when v.Major == 5 && v.Minor == 0: return GetPlatformSpecific(Core50);
                 case Version v when v.Major == 6 && v.Minor == 0: return GetPlatformSpecific(Core60);
                 case Version v when v.Major == 7 && v.Minor == 0: return GetPlatformSpecific(Core70);
+                case Version v when v.Major == 8 && v.Minor == 0: return GetPlatformSpecific(Core80);
+                case Version v when v.Major == 9 && v.Minor == 0: return GetPlatformSpecific(Core90);
+                case Version v when v.Major == 10 && v.Minor == 0: return GetPlatformSpecific(Core10_0);
                 default:
-                    return CreateForNewVersion($"net{version.Major}.{version.Minor}", $".NET {version.Major}.{version.Minor}");
+                    return version >= new Version(3, 1)
+                        ? CreateForNewVersion($"net{version.Major}.{version.Minor}", $".NET {version.Major}.{version.Minor}")
+                        : throw new PlatformNotSupportedException($"netcoreapp{version.Major}.{version.Minor} is no longer supported. Use a newer runtime version or use BenchmarkDotNet v0.14.X or older.");
             }
         }
 
-        internal static bool TryGetVersion(out Version version)
+        internal static bool TryGetVersion(out Version? version)
         {
             // we can't just use System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
             // because it can be null and it reports versions like 4.6.* for .NET Core 2.*
@@ -122,7 +130,7 @@ namespace BenchmarkDotNet.Environments
         // sample input:
         // for dotnet run: C:\Program Files\dotnet\shared\Microsoft.NETCore.App\2.1.12\
         // for dotnet publish: C:\Users\adsitnik\source\repos\ConsoleApp25\ConsoleApp25\bin\Release\netcoreapp2.0\win-x64\publish\
-        internal static bool TryGetVersionFromRuntimeDirectory(string runtimeDirectory, out Version version)
+        internal static bool TryGetVersionFromRuntimeDirectory(string runtimeDirectory, out Version? version)
         {
             if (!string.IsNullOrEmpty(runtimeDirectory) && Version.TryParse(GetParsableVersionPart(new DirectoryInfo(runtimeDirectory).Name), out version))
             {
@@ -139,7 +147,7 @@ namespace BenchmarkDotNet.Environments
         // 2.2: 4.6.27817.03 @BuiltBy: dlab14-DDVSOWINAGE101 @Branch: release/2.2 @SrcCode: https://github.com/dotnet/coreclr/tree/ce1d090d33b400a25620c0145046471495067cc7, Microsoft .NET Framework
         // 3.0: 3.0.0-preview8.19379.2+ac25be694a5385a6a1496db40de932df0689b742, Microsoft .NET Core
         // 5.0: 5.0.0-alpha1.19413.7+0ecefa44c9d66adb8a997d5778dc6c246ad393a7, Microsoft .NET Core
-        internal static bool TryGetVersionFromProductInfo(string productVersion, string productName, out Version version)
+        internal static bool TryGetVersionFromProductInfo(string productVersion, string productName, out Version? version)
         {
             if (!string.IsNullOrEmpty(productVersion) && !string.IsNullOrEmpty(productName))
             {
@@ -156,7 +164,7 @@ namespace BenchmarkDotNet.Environments
                 if (productName.IndexOf(".NET Framework", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     const string releaseVersionPrefix = "release/";
-                    int releaseVersionIndex = productVersion.IndexOf(releaseVersionPrefix);
+                    int releaseVersionIndex = productVersion.IndexOf(releaseVersionPrefix, StringComparison.Ordinal);
                     if (releaseVersionIndex > 0)
                     {
                         string releaseVersion = GetParsableVersionPart(productVersion.Substring(releaseVersionIndex + releaseVersionPrefix.Length));
@@ -173,7 +181,7 @@ namespace BenchmarkDotNet.Environments
         // sample input:
         // .NETCoreApp,Version=v2.0
         // .NETCoreApp,Version=v2.1
-        internal static bool TryGetVersionFromFrameworkName(string frameworkName, out Version version)
+        internal static bool TryGetVersionFromFrameworkName(string frameworkName, out Version? version)
         {
             const string versionPrefix = ".NETCoreApp,Version=v";
             if (!string.IsNullOrEmpty(frameworkName) && frameworkName.StartsWith(versionPrefix))
@@ -188,7 +196,7 @@ namespace BenchmarkDotNet.Environments
         }
 
         // Version.TryParse does not handle thing like 3.0.0-WORD
-        private static string GetParsableVersionPart(string fullVersionName) => new string(fullVersionName.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        internal static string GetParsableVersionPart(string fullVersionName) => new string(fullVersionName.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
 
         private static CoreRuntime GetPlatformSpecific(CoreRuntime fallback)
         {

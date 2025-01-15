@@ -8,10 +8,15 @@ using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Order;
+using BenchmarkDotNet.Phd;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Validators;
 using JetBrains.Annotations;
 using Perfolizer.Horology;
+using Perfolizer.Phd;
+using Perfolizer.Phd.Base;
+using Perfolizer.Phd.Dto;
+using Perfolizer.Phd.Tables;
 
 namespace BenchmarkDotNet.Reports
 {
@@ -47,7 +52,8 @@ namespace BenchmarkDotNet.Reports
             TimeSpan totalTime,
             CultureInfo cultureInfo,
             ImmutableArray<ValidationError> validationErrors,
-            ImmutableArray<IColumnHidingRule> columnHidingRules)
+            ImmutableArray<IColumnHidingRule> columnHidingRules,
+            SummaryStyle? summaryStyle = null)
         {
             Title = title;
             ResultsDirectoryPath = resultsDirectoryPath;
@@ -61,10 +67,11 @@ namespace BenchmarkDotNet.Reports
 
             DisplayPrecisionManager = new DisplayPrecisionManager(this);
             Orderer = GetConfiguredOrdererOrDefaultOne(reports.Select(report => report.BenchmarkCase.Config));
-            BenchmarksCases = Orderer.GetSummaryOrder(reports.Select(report => report.BenchmarkCase).ToImmutableArray(), this).ToImmutableArray(); // we sort it first
+            BenchmarksCases =
+                Orderer.GetSummaryOrder(reports.Select(report => report.BenchmarkCase).ToImmutableArray(), this).ToImmutableArray(); // we sort it first
             Reports = BenchmarksCases.Select(b => ReportMap[b]).ToImmutableArray(); // we use sorted collection to re-create reports list
             BaseliningStrategy = BaseliningStrategy.Create(BenchmarksCases);
-            Style = GetConfiguredSummaryStyleOrDefaultOne(BenchmarksCases).WithCultureInfo(cultureInfo);
+            Style = (summaryStyle ?? GetConfiguredSummaryStyleOrDefaultOne(BenchmarksCases)).WithCultureInfo(cultureInfo);
             Table = GetTable(Style);
             AllRuntimes = BuildAllRuntimes(HostEnvironmentInfo, Reports);
         }
@@ -74,7 +81,7 @@ namespace BenchmarkDotNet.Reports
         /// <summary>
         /// Returns a report for the given benchmark or null if there is no a corresponded report.
         /// </summary>
-        public BenchmarkReport this[BenchmarkCase benchmarkCase] => ReportMap.GetValueOrDefault(benchmarkCase);
+        public BenchmarkReport? this[BenchmarkCase benchmarkCase] => ReportMap.GetValueOrDefault(benchmarkCase);
 
         public bool HasCriticalValidationErrors => ValidationErrors.Any(validationError => validationError.IsCritical);
 
@@ -83,11 +90,10 @@ namespace BenchmarkDotNet.Reports
         public bool IsMultipleRuntimes
             => isMultipleRuntimes ??= BenchmarksCases.Length > 1 ? BenchmarksCases.Select(benchmark => benchmark.GetRuntime()).Distinct().Count() > 1 : false;
 
-        internal static Summary NothingToRun(string title, string resultsDirectoryPath, string logFilePath)
-            => new Summary(title, ImmutableArray<BenchmarkReport>.Empty, HostEnvironmentInfo.GetCurrent(), resultsDirectoryPath, logFilePath, TimeSpan.Zero, DefaultCultureInfo.Instance, ImmutableArray<ValidationError>.Empty, ImmutableArray<IColumnHidingRule>.Empty);
-
-        internal static Summary ValidationFailed(string title, string resultsDirectoryPath, string logFilePath, ImmutableArray<ValidationError> validationErrors)
-            => new Summary(title, ImmutableArray<BenchmarkReport>.Empty, HostEnvironmentInfo.GetCurrent(), resultsDirectoryPath, logFilePath, TimeSpan.Zero, DefaultCultureInfo.Instance, validationErrors, ImmutableArray<IColumnHidingRule>.Empty);
+        internal static Summary ValidationFailed(string title, string resultsDirectoryPath, string logFilePath,
+            ImmutableArray<ValidationError>? validationErrors = null)
+            => new Summary(title, ImmutableArray<BenchmarkReport>.Empty, HostEnvironmentInfo.GetCurrent(), resultsDirectoryPath, logFilePath, TimeSpan.Zero,
+                DefaultCultureInfo.Instance, validationErrors ?? ImmutableArray<ValidationError>.Empty, ImmutableArray<IColumnHidingRule>.Empty);
 
         internal static Summary Join(List<Summary> summaries, ClockSpan clockSpan)
             => new Summary(
@@ -110,7 +116,7 @@ namespace BenchmarkDotNet.Reports
 
             foreach (var benchmarkReport in reports)
             {
-                string runtime = benchmarkReport.GetRuntimeInfo();
+                string? runtime = benchmarkReport.GetRuntimeInfo();
                 if (runtime != null)
                 {
                     string jobId = benchmarkReport.BenchmarkCase.Job.ResolvedId;
@@ -131,20 +137,17 @@ namespace BenchmarkDotNet.Reports
 
         internal SummaryTable GetTable(SummaryStyle style) => new SummaryTable(this, style);
 
-        [CanBeNull]
-        public string GetLogicalGroupKey(BenchmarkCase benchmarkCase)
+        public string? GetLogicalGroupKey(BenchmarkCase benchmarkCase)
             => Orderer.GetLogicalGroupKey(BenchmarksCases, benchmarkCase);
 
         public bool IsBaseline(BenchmarkCase benchmarkCase)
             => BaseliningStrategy.IsBaseline(benchmarkCase);
 
-        [CanBeNull]
-        public BenchmarkCase GetBaseline(string logicalGroupKey)
+        public BenchmarkCase? GetBaseline(string? logicalGroupKey)
             => BenchmarksCases
                 .Where(b => GetLogicalGroupKey(b) == logicalGroupKey)
                 .FirstOrDefault(IsBaseline);
 
-        [NotNull]
         public IEnumerable<BenchmarkCase> GetNonBaselines(string logicalGroupKey)
             => BenchmarksCases
                 .Where(b => GetLogicalGroupKey(b) == logicalGroupKey)
@@ -157,16 +160,52 @@ namespace BenchmarkDotNet.Reports
                    .Where(config => config.Orderer != DefaultOrderer.Instance)
                    .Select(config => config.Orderer)
                    .Distinct()
-                   .SingleOrDefault()
+                   .FirstOrDefault()
                ?? DefaultOrderer.Instance;
 
         private static SummaryStyle GetConfiguredSummaryStyleOrDefaultOne(ImmutableArray<BenchmarkCase> benchmarkCases)
             => benchmarkCases
                    .Where(benchmark => benchmark.Config.SummaryStyle != SummaryStyle.Default
-                          && benchmark.Config.SummaryStyle != null) // Paranoid
+#nullable disable
+                                       // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract ConditionIsAlwaysTrueOrFalse
+                                       // TODO: remove this check once the nullability migration is finished
+                                       && benchmark.Config.SummaryStyle != null) // Paranoid
+#nullable enable
                    .Select(benchmark => benchmark.Config.SummaryStyle)
                    .Distinct()
-                   .SingleOrDefault()
+                   .FirstOrDefault()
                ?? SummaryStyle.Default;
+
+        // TODO: GcStats
+        public PhdEntry ToPhd()
+        {
+            var tableConfig = new PhdTableConfig
+            {
+                ColumnDefinitions =
+                [
+                    new PhdColumnDefinition(".engine") { Cloud = "primary", IsSelfExplanatory = true, IsAtomic = true },
+                    new PhdColumnDefinition(".host.os") { Cloud = "primary", IsSelfExplanatory = true, IsAtomic = true },
+                    new PhdColumnDefinition(".host.cpu") { Cloud = "primary", IsSelfExplanatory = true, IsAtomic = true },
+                    new PhdColumnDefinition(".benchmark") { Cloud = "secondary" },
+                    new PhdColumnDefinition(".job") { Cloud = "secondary", Compressed = true },
+                    new PhdColumnDefinition("=center"),
+                    new PhdColumnDefinition("=spread")
+                ]
+            };
+
+            var root = new PhdEntry
+            {
+                Engine = new PhdEngine
+                {
+                    Name = HostEnvironmentInfo.BenchmarkDotNetCaption,
+                    Version = HostEnvironmentInfo.BenchmarkDotNetVersion,
+                },
+                Host = HostEnvironmentInfo.ToPhd(),
+                Meta = new PhdMeta { Table = tableConfig }
+            };
+            foreach (var benchmarkReport in Reports)
+                root.Add(benchmarkReport.ToPhd());
+            return root;
+        }
     }
 }

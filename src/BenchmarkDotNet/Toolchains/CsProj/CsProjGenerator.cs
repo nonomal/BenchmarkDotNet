@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Xml;
 using BenchmarkDotNet.Characteristics;
 using BenchmarkDotNet.Extensions;
 using BenchmarkDotNet.Helpers;
@@ -22,8 +23,20 @@ namespace BenchmarkDotNet.Toolchains.CsProj
     {
         private const string DefaultSdkName = "Microsoft.NET.Sdk";
 
-        private static readonly ImmutableArray<string> SettingsWeWantToCopy =
-            new[] { "NetCoreAppImplicitPackageVersion", "RuntimeFrameworkVersion", "PackageTargetFallback", "LangVersion", "UseWpf", "UseWindowsForms", "CopyLocalLockFileAssemblies", "PreserveCompilationContext", "UserSecretsId", "EnablePreviewFeatures" }.ToImmutableArray();
+        private static readonly ImmutableArray<string> SettingsWeWantToCopy = new[]
+        {
+            "NetCoreAppImplicitPackageVersion",
+            "RuntimeFrameworkVersion",
+            "PackageTargetFallback",
+            "LangVersion",
+            "UseWpf",
+            "UseWindowsForms",
+            "CopyLocalLockFileAssemblies",
+            "PreserveCompilationContext",
+            "UserSecretsId",
+            "EnablePreviewFeatures",
+            "RuntimeHostConfigurationOption",
+        }.ToImmutableArray();
 
         public string RuntimeFrameworkVersion { get; }
 
@@ -51,30 +64,32 @@ namespace BenchmarkDotNet.Toolchains.CsProj
         protected override string GetBinariesDirectoryPath(string buildArtifactsDirectoryPath, string configuration)
             => Path.Combine(buildArtifactsDirectoryPath, "bin", configuration, TargetFrameworkMoniker);
 
+        protected override string GetIntermediateDirectoryPath(string buildArtifactsDirectoryPath, string configuration)
+            => Path.Combine(buildArtifactsDirectoryPath, "obj", configuration, TargetFrameworkMoniker);
+
         [SuppressMessage("ReSharper", "StringLiteralTypo")] // R# complains about $variables$
         protected override void GenerateProject(BuildPartition buildPartition, ArtifactsPaths artifactsPaths, ILogger logger)
         {
             var benchmark = buildPartition.RepresentativeBenchmarkCase;
             var projectFile = GetProjectFilePath(benchmark.Descriptor.Type, logger);
 
-            using (var file = new StreamReader(File.OpenRead(projectFile.FullName)))
-            {
-                var (customProperties, sdkName) = GetSettingsThatNeedsToBeCopied(file, projectFile);
+            var xmlDoc = new XmlDocument();
+            xmlDoc.Load(projectFile.FullName);
+            var (customProperties, sdkName) = GetSettingsThatNeedToBeCopied(xmlDoc, projectFile);
 
-                var content = new StringBuilder(ResourceHelper.LoadTemplate("CsProj.txt"))
-                    .Replace("$PLATFORM$", buildPartition.Platform.ToConfig())
-                    .Replace("$CODEFILENAME$", Path.GetFileName(artifactsPaths.ProgramCodePath))
-                    .Replace("$CSPROJPATH$", projectFile.FullName)
-                    .Replace("$TFM$", TargetFrameworkMoniker)
-                    .Replace("$PROGRAMNAME$", artifactsPaths.ProgramName)
-                    .Replace("$RUNTIMESETTINGS$", GetRuntimeSettings(benchmark.Job.Environment.Gc, buildPartition.Resolver))
-                    .Replace("$COPIEDSETTINGS$", customProperties)
-                    .Replace("$CONFIGURATIONNAME$", buildPartition.BuildConfiguration)
-                    .Replace("$SDKNAME$", sdkName)
-                    .ToString();
+            var content = new StringBuilder(ResourceHelper.LoadTemplate("CsProj.txt"))
+                .Replace("$PLATFORM$", buildPartition.Platform.ToConfig())
+                .Replace("$CODEFILENAME$", Path.GetFileName(artifactsPaths.ProgramCodePath))
+                .Replace("$CSPROJPATH$", projectFile.FullName)
+                .Replace("$TFM$", TargetFrameworkMoniker)
+                .Replace("$PROGRAMNAME$", artifactsPaths.ProgramName)
+                .Replace("$RUNTIMESETTINGS$", GetRuntimeSettings(benchmark.Job.Environment.Gc, buildPartition.Resolver))
+                .Replace("$COPIEDSETTINGS$", customProperties)
+                .Replace("$CONFIGURATIONNAME$", buildPartition.BuildConfiguration)
+                .Replace("$SDKNAME$", sdkName)
+                .ToString();
 
-                File.WriteAllText(artifactsPaths.ProjectFilePath, content);
-            }
+            File.WriteAllText(artifactsPaths.ProjectFilePath, content);
         }
 
         /// <summary>
@@ -97,45 +112,134 @@ namespace BenchmarkDotNet.Toolchains.CsProj
         // the host project or one of the .props file that it imports might contain some custom settings that needs to be copied, sth like
         // <NetCoreAppImplicitPackageVersion>2.0.0-beta-001607-00</NetCoreAppImplicitPackageVersion>
         // <RuntimeFrameworkVersion>2.0.0-beta-001607-00</RuntimeFrameworkVersion>
-        internal (string customProperties, string sdkName) GetSettingsThatNeedsToBeCopied(TextReader streamReader, FileInfo projectFile)
+        internal (string customProperties, string sdkName) GetSettingsThatNeedToBeCopied(XmlDocument xmlDoc, FileInfo projectFile)
         {
             if (!string.IsNullOrEmpty(RuntimeFrameworkVersion)) // some power users knows what to configure, just do it and copy nothing more
-                return ($"<RuntimeFrameworkVersion>{RuntimeFrameworkVersion}</RuntimeFrameworkVersion>", DefaultSdkName);
-
-            var customProperties = new StringBuilder();
-            var sdkName = DefaultSdkName;
-
-            string line;
-            while ((line = streamReader.ReadLine()) != null)
             {
-                var trimmedLine = line.Trim();
-
-                foreach (string setting in SettingsWeWantToCopy)
-                    if (trimmedLine.Contains(setting))
-                        customProperties.AppendLine(trimmedLine);
-
-                if (trimmedLine.StartsWith("<Import Project"))
-                {
-                    string propsFilePath = trimmedLine.Split('"')[1]; // its sth like   <Import Project="..\..\build\common.props" />
-                    var directoryName = projectFile.DirectoryName ?? throw new DirectoryNotFoundException(projectFile.DirectoryName);
-                    string absolutePath = File.Exists(propsFilePath)
-                        ? propsFilePath // absolute path or relative to current dir
-                        : Path.Combine(directoryName, propsFilePath); // relative to csproj
-
-                    if (File.Exists(absolutePath))
-                        using (var importedFile = new StreamReader(File.OpenRead(absolutePath)))
-                            customProperties.Append(GetSettingsThatNeedsToBeCopied(importedFile, new FileInfo(absolutePath)).customProperties);
-                }
-
-                // custom SDKs are not added for non-netcoreapp apps (like net471), so when the TFM != netcoreapp we dont parse "<Import Sdk="
-                // we don't allow for that mostly to prevent from edge cases like the following
-                // <Import Sdk="Microsoft.NET.Sdk.WindowsDesktop" Project="Sdk.props" Condition="'$(TargetFramework)'=='netcoreapp3.0'"/>
-                if (trimmedLine.StartsWith("<Project Sdk=\"")
-                    || (TargetFrameworkMoniker.StartsWith("netcoreapp", StringComparison.InvariantCultureIgnoreCase) &&  trimmedLine.StartsWith("<Import Sdk=\"")))
-                    sdkName = trimmedLine.Split('"')[1]; // its sth like Sdk="name"
+                return (@$"<PropertyGroup>
+  <RuntimeFrameworkVersion>{RuntimeFrameworkVersion}</RuntimeFrameworkVersion>
+</PropertyGroup>", DefaultSdkName);
             }
 
-            return (customProperties.ToString(), sdkName);
+            XmlElement projectElement = xmlDoc.DocumentElement;
+            // custom SDKs are not added for non-netcoreapp apps (like net471), so when the TFM != netcoreapp we dont parse "<Import Sdk="
+            // we don't allow for that mostly to prevent from edge cases like the following
+            // <Import Sdk="Microsoft.NET.Sdk.WindowsDesktop" Project="Sdk.props" Condition="'$(TargetFramework)'=='netcoreapp3.0'"/>
+            string? sdkName = null;
+            if (TargetFrameworkMoniker.StartsWith("netcoreapp", StringComparison.InvariantCultureIgnoreCase))
+            {
+                foreach (XmlElement importElement in projectElement.GetElementsByTagName("Import"))
+                {
+                    sdkName = importElement.GetAttribute("Sdk");
+                    if (!string.IsNullOrEmpty(sdkName))
+                    {
+                        break;
+                    }
+                }
+            }
+            if (string.IsNullOrEmpty(sdkName))
+            {
+                sdkName = projectElement.GetAttribute("Sdk");
+            }
+            // If Sdk isn't an attribute on the Project element, it could be a child element.
+            if (string.IsNullOrEmpty(sdkName))
+            {
+                foreach (XmlElement sdkElement in projectElement.GetElementsByTagName("Sdk"))
+                {
+                    sdkName = sdkElement.GetAttribute("Name");
+                    if (string.IsNullOrEmpty(sdkName))
+                    {
+                        continue;
+                    }
+                    string version = sdkElement.GetAttribute("Version");
+                    // Version is optional
+                    if (!string.IsNullOrEmpty(version))
+                    {
+                        sdkName += $"/{version}";
+                    }
+                    break;
+                }
+            }
+            if (string.IsNullOrEmpty(sdkName))
+            {
+                sdkName = DefaultSdkName;
+            }
+
+            XmlDocument? itemGroupsettings = null;
+            XmlDocument? propertyGroupSettings = null;
+
+            GetSettingsThatNeedToBeCopied(projectElement, ref itemGroupsettings, ref propertyGroupSettings, projectFile);
+
+            List<string> customSettings = new List<string>(2);
+            if (itemGroupsettings != null)
+            {
+                customSettings.Add(GetIndentedXmlString(itemGroupsettings));
+            }
+            if (propertyGroupSettings != null)
+            {
+                customSettings.Add(GetIndentedXmlString(propertyGroupSettings));
+            }
+
+            return (string.Join(Environment.NewLine + Environment.NewLine, customSettings), sdkName);
+        }
+
+        private static void GetSettingsThatNeedToBeCopied(XmlElement projectElement, ref XmlDocument itemGroupsettings, ref XmlDocument propertyGroupSettings, FileInfo projectFile)
+        {
+            CopyProperties(projectElement, ref itemGroupsettings, "ItemGroup");
+            CopyProperties(projectElement, ref propertyGroupSettings, "PropertyGroup");
+
+            foreach (XmlElement importElement in projectElement.GetElementsByTagName("Import"))
+            {
+                string propsFilePath = importElement.GetAttribute("Project");
+                var directoryName = projectFile.DirectoryName ?? throw new DirectoryNotFoundException(projectFile.DirectoryName);
+                string absolutePath = File.Exists(propsFilePath)
+                    ? propsFilePath // absolute path or relative to current dir
+                    : Path.Combine(directoryName, propsFilePath); // relative to csproj
+                if (File.Exists(absolutePath))
+                {
+                    var importXmlDoc = new XmlDocument();
+                    importXmlDoc.Load(absolutePath);
+                    GetSettingsThatNeedToBeCopied(importXmlDoc.DocumentElement, ref itemGroupsettings, ref propertyGroupSettings, projectFile);
+                }
+            }
+        }
+
+        private static void CopyProperties(XmlElement projectElement, ref XmlDocument copyToDocument, string groupName)
+        {
+            XmlElement itemGroupElement = copyToDocument?.DocumentElement;
+            foreach (XmlElement groupElement in projectElement.GetElementsByTagName(groupName))
+            {
+                foreach (var node in groupElement.ChildNodes)
+                {
+                    if (node is XmlElement setting && SettingsWeWantToCopy.Contains(setting.Name))
+                    {
+                        if (copyToDocument is null)
+                        {
+                            copyToDocument = new XmlDocument();
+                            itemGroupElement = copyToDocument.CreateElement(groupName);
+                            copyToDocument.AppendChild(itemGroupElement);
+                        }
+                        XmlNode copiedNode = copyToDocument.ImportNode(setting, true);
+                        itemGroupElement.AppendChild(copiedNode);
+                    }
+                }
+            }
+        }
+
+        private static string GetIndentedXmlString(XmlDocument doc)
+        {
+            StringBuilder sb = new StringBuilder();
+            XmlWriterSettings settings = new XmlWriterSettings
+            {
+                OmitXmlDeclaration = true,
+                Indent = true,
+                IndentChars = "  "
+            };
+            using (XmlWriter writer = XmlWriter.Create(sb, settings))
+            {
+                doc.Save(writer);
+            }
+            return sb.ToString();
         }
 
         /// <summary>
@@ -154,19 +258,24 @@ namespace BenchmarkDotNet.Toolchains.CsProj
             // important assumption! project's file name === output dll name
             string projectName = benchmarkTarget.GetTypeInfo().Assembly.GetName().Name;
 
-            // I was afraid of using .GetFiles with some smart search pattern due to the fact that the method was designed for Windows
-            // and now .NET is cross platform so who knows if the pattern would be supported for other OSes
             var possibleNames = new HashSet<string> { $"{projectName}.csproj", $"{projectName}.fsproj", $"{projectName}.vbproj" };
-            var projectFile = rootDirectory
-                .EnumerateFiles("*.*", SearchOption.AllDirectories)
-                .FirstOrDefault(file => possibleNames.Contains(file.Name));
+            var projectFiles = rootDirectory
+                .EnumerateFiles("*proj", SearchOption.AllDirectories)
+                .Where(file => possibleNames.Contains(file.Name))
+                .ToArray();
 
-            if (projectFile == default(FileInfo))
+            if (projectFiles.Length == 0)
             {
                 throw new NotSupportedException(
                     $"Unable to find {projectName} in {rootDirectory.FullName} and its subfolders. Most probably the name of output exe is different than the name of the .(c/f)sproj");
             }
-            return projectFile;
+            else if (projectFiles.Length > 1)
+            {
+                throw new NotSupportedException(
+                    $"Found more than one matching project file for {projectName} in {rootDirectory.FullName} and its subfolders: {string.Join(",", projectFiles.Select(pf => $"'{pf.FullName}'"))}. Benchmark project names needs to be unique.");
+            }
+
+            return projectFiles[0];
         }
 
         public override bool Equals(object obj) => obj is CsProjGenerator other && Equals(other);
@@ -178,9 +287,6 @@ namespace BenchmarkDotNet.Toolchains.CsProj
                 && PackagesPath == other.PackagesPath;
 
         public override int GetHashCode()
-            => TargetFrameworkMoniker.GetHashCode()
-                ^ (RuntimeFrameworkVersion?.GetHashCode() ?? 0)
-                ^ (CliPath?.GetHashCode() ?? 0)
-                ^ (PackagesPath?.GetHashCode() ?? 0);
+            => HashCode.Combine(TargetFrameworkMoniker, RuntimeFrameworkVersion, CliPath, PackagesPath);
     }
 }

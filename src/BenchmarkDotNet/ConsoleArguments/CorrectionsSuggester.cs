@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Extensions;
 using BenchmarkDotNet.Running;
-using JetBrains.Annotations;
 
 namespace BenchmarkDotNet.ConsoleArguments
 {
@@ -21,7 +21,7 @@ namespace BenchmarkDotNet.ConsoleArguments
             {
                 foreach (var benchmarkCase in benchmarkRunInfo.BenchmarksCases)
                 {
-                    string fullBenchmarkName = benchmarkCase.Descriptor.GetFilterName();
+                    string fullBenchmarkName = FullNameProvider.GetBenchmarkName(benchmarkCase);
 
                     actualFullBenchmarkNames.Add(fullBenchmarkName);
 
@@ -31,7 +31,7 @@ namespace BenchmarkDotNet.ConsoleArguments
             }
         }
 
-        public string[] SuggestFor([NotNull] string userInput)
+        public string[] SuggestFor(string userInput)
         {
             if (userInput == null)
                 throw new ArgumentNullException(nameof(userInput));

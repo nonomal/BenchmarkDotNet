@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Loggers;
@@ -11,7 +12,7 @@ using Microsoft.Diagnostics.Tracing.Parsers;
 
 namespace BenchmarkDotNet.Diagnostics.Windows
 {
-    public abstract class JitDiagnoser : EtwDiagnoser<object>, IDiagnoser
+    public abstract class JitDiagnoser<TStats> : EtwDiagnoser<TStats>, IDiagnoser where TStats : new()
     {
         protected override ulong EventType => (ulong)ClrTraceEventParser.Keywords.JitTracing;
 
@@ -33,7 +34,7 @@ namespace BenchmarkDotNet.Diagnostics.Windows
 
         public IEnumerable<ValidationError> Validate(ValidationParameters validationParameters)
         {
-            if (!RuntimeInformation.IsWindows())
+            if (!OsDetector.IsWindows())
             {
                 yield return new ValidationError(true, $"{GetType().Name} is supported only on Windows");
             }

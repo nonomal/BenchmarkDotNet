@@ -17,7 +17,7 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
         private bool ilcGenerateCompleteTypeMetadata = true;
         private bool ilcGenerateStackTraceData = true;
         private string ilcOptimizationPreference = "Speed";
-        private string ilcInstructionSet = null;
+        private string? ilcInstructionSet = null;
 
         private bool isIlCompilerConfigured;
 
@@ -26,9 +26,9 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
         /// Based on https://github.com/dotnet/runtimelab/blob/d0a37893a67c125f9b0cd8671846ff7d867df241/samples/HelloWorld/README.md#add-corert-to-your-project
         /// </summary>
         /// <param name="microsoftDotNetILCompilerVersion">the version of Microsoft.DotNet.ILCompiler which should be used. The default is empty which maps to latest version.</param>
-        /// <param name="nuGetFeedUrl">url to NuGet feed, The default is: "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet7/nuget/v3/index.json"</param>
+        /// <param name="nuGetFeedUrl">url to NuGet feed, The default is: "https://api.nuget.org/v3/index.json"</param>
         [PublicAPI]
-        public NativeAotToolchainBuilder UseNuGet(string microsoftDotNetILCompilerVersion = "", string nuGetFeedUrl = "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet7/nuget/v3/index.json")
+        public NativeAotToolchainBuilder UseNuGet(string microsoftDotNetILCompilerVersion = "", string nuGetFeedUrl = "https://api.nuget.org/v3/index.json")
         {
             ilCompilerVersion = microsoftDotNetILCompilerVersion;
 
@@ -53,8 +53,8 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
             if (!ilcPackages.Exists) throw new DirectoryNotFoundException($"{ilcPackages} provided as {nameof(ilcPackages)} does NOT exist");
 
             Feeds["local"] = ilcPackages.FullName;
-            ilCompilerVersion = "7.0.0-dev";
-            Feeds["dotnet7"] = "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet7/nuget/v3/index.json";
+            ilCompilerVersion = "10.0.0-dev";
+            Feeds["dotnet10"] = "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json";
             useTempFolderForRestore = true;
             DisplayName("local ILCompiler build");
 

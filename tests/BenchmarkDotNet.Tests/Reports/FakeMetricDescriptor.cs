@@ -5,7 +5,7 @@ namespace BenchmarkDotNet.Tests.Reports
 {
     internal sealed class FakeMetricDescriptor : IMetricDescriptor
     {
-        public FakeMetricDescriptor(string id, string legend, string numberFormat = null)
+        public FakeMetricDescriptor(string id, string legend, string? numberFormat = null)
         {
             Id = id;
             Legend = legend;
@@ -20,5 +20,6 @@ namespace BenchmarkDotNet.Tests.Reports
         public string Unit { get; }
         public bool TheGreaterTheBetter { get; }
         public int PriorityInCategory => 0;
+        public bool GetIsAvailable(Metric metric) => true;
     }
 }

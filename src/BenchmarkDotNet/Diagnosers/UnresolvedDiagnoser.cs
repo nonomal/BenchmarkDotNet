@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using BenchmarkDotNet.Analysers;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Loggers;
@@ -19,7 +20,7 @@ namespace BenchmarkDotNet.Diagnosers
 
         public RunMode GetRunMode(BenchmarkCase benchmarkCase) => RunMode.None;
 
-        public IEnumerable<string> Ids => Array.Empty<string>();
+        public IEnumerable<string> Ids => new string[] { nameof(UnresolvedDiagnoser) };
         public IEnumerable<IExporter> Exporters => Array.Empty<IExporter>();
         public IEnumerable<IAnalyser> Analysers => Array.Empty<IAnalyser>();
         public void Handle(HostSignal signal, DiagnoserActionParameters parameters) { }
@@ -31,10 +32,10 @@ namespace BenchmarkDotNet.Diagnosers
             => new[] { new ValidationError(false, GetErrorMessage()) };
 
         private string GetErrorMessage() => $@"Unable to resolve {unresolved.Name} diagnoser using dynamic assembly loading. 
-            {(RuntimeInformation.IsFullFramework || RuntimeInformation.IsWindows()
+            {(RuntimeInformation.IsFullFramework || OsDetector.IsWindows()
                 ? "Please make sure that you have installed the latest BenchmarkDotNet.Diagnostics.Windows package. " + Environment.NewLine
                     + "If you are using `dotnet build` you also need to consume one of its public types to make sure that MSBuild copies it to the output directory. "
                     + "The alternative is to use `<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>` in your project file."
-                : $"Please make sure that it's supported on {RuntimeInformation.GetOsVersion()}")}";
+                : $"Please make sure that it's supported on {OsDetector.GetOs()}")}";
     }
 }

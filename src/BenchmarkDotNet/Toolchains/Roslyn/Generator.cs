@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Extensions;
 using BenchmarkDotNet.Portability;
 using BenchmarkDotNet.Running;
@@ -27,9 +28,9 @@ namespace BenchmarkDotNet.Toolchains.Roslyn
 
         protected override void GenerateBuildScript(BuildPartition buildPartition, ArtifactsPaths artifactsPaths)
         {
-            string prefix = RuntimeInformation.IsWindows() ? "" : "#!/bin/bash\n";
+            string prefix = OsDetector.IsWindows() ? "" : "#!/bin/bash\n";
             var list = new List<string>();
-            if (!RuntimeInformation.IsWindows())
+            if (!OsDetector.IsWindows())
                 list.Add("mono");
             list.Add("csc");
             list.Add("/noconfig");
@@ -38,8 +39,8 @@ namespace BenchmarkDotNet.Toolchains.Roslyn
             list.Add("/unsafe");
             list.Add("/deterministic");
             list.Add("/platform:" + buildPartition.Platform.ToConfig());
-            list.Add("/appconfig:" + artifactsPaths.AppConfigPath.Escape());
-            var references = GetAllReferences(buildPartition.RepresentativeBenchmarkCase).Select(assembly => assembly.Location.Escape());
+            list.Add("/appconfig:" + artifactsPaths.AppConfigPath.EscapeCommandLine());
+            var references = GetAllReferences(buildPartition.RepresentativeBenchmarkCase).Select(assembly => assembly.Location.EscapeCommandLine());
             list.Add("/reference:" + string.Join(",", references));
             list.Add(Path.GetFileName(artifactsPaths.ProgramCodePath));
 

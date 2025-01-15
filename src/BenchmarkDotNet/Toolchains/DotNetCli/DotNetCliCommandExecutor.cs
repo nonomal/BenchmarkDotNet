@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Extensions;
 using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
+using BenchmarkDotNet.Portability;
 using JetBrains.Annotations;
 
 namespace BenchmarkDotNet.Toolchains.DotNetCli
@@ -22,11 +23,11 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
         [PublicAPI]
         public static DotNetCliCommandResult Execute(DotNetCliCommand parameters)
         {
-            using (var process = new Process { StartInfo = BuildStartInfo(parameters.CliPath, parameters.GenerateResult.ArtifactsPaths.BuildArtifactsDirectoryPath, parameters.Arguments, parameters.EnvironmentVariables) })
+            using (var process = new Process { StartInfo = BuildStartInfo(parameters.CliPath, parameters.GenerateResult?.ArtifactsPaths.BuildArtifactsDirectoryPath, parameters.Arguments, parameters.EnvironmentVariables) })
             using (var outputReader = new AsyncProcessOutputReader(process, parameters.LogOutput, parameters.Logger))
             using (new ConsoleExitHandler(process, parameters.Logger))
             {
-                parameters.Logger.WriteLineInfo($"// start {parameters.CliPath ?? "dotnet"} {parameters.Arguments} in {parameters.GenerateResult.ArtifactsPaths.BuildArtifactsDirectoryPath}");
+                parameters.Logger.WriteLineInfo($"// start {process.StartInfo.FileName} {process.StartInfo.Arguments} in {process.StartInfo.WorkingDirectory}");
 
                 var stopwatch = Stopwatch.StartNew();
 
@@ -46,7 +47,7 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
                 stopwatch.Stop();
                 outputReader.StopRead();
 
-                parameters.Logger.WriteLineInfo($"// command took {stopwatch.Elapsed.TotalSeconds:0.##}s and exited with {process.ExitCode}");
+                parameters.Logger.WriteLineInfo($"// command took {stopwatch.Elapsed.TotalSeconds.ToInvariantString("0.##")} sec and exited with {process.ExitCode}");
 
                 return process.ExitCode <= 0
                     ? DotNetCliCommandResult.Success(stopwatch.Elapsed, outputReader.GetOutputText())
@@ -54,9 +55,9 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
             }
         }
 
-        internal static string GetDotNetSdkVersion()
+        internal static string? GetDotNetSdkVersion()
         {
-            using (var process = new Process { StartInfo = BuildStartInfo(customDotNetCliPath: null, workingDirectory: string.Empty, arguments: "--version") })
+            using (var process = new Process { StartInfo = BuildStartInfo(customDotNetCliPath: null, workingDirectory: string.Empty, arguments: "--version", redirectStandardError: false) })
             using (new ConsoleExitHandler(process, NullLogger.Instance))
             {
                 try
@@ -98,8 +99,8 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
             }
         }
 
-        internal static ProcessStartInfo BuildStartInfo(string customDotNetCliPath, string workingDirectory, string arguments,
-            IReadOnlyList<EnvironmentVariable> environmentVariables = null, bool redirectStandardInput = false, bool redirectStandardError = true, bool redirectStandardOutput = true)
+        internal static ProcessStartInfo BuildStartInfo(string? customDotNetCliPath, string workingDirectory, string arguments,
+            IReadOnlyList<EnvironmentVariable>? environmentVariables = null, bool redirectStandardInput = false, bool redirectStandardError = true, bool redirectStandardOutput = true)
         {
             const string dotnetMultiLevelLookupEnvVarName = "DOTNET_MULTILEVEL_LOOKUP";
 
@@ -137,10 +138,10 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
 
         private static string GetDefaultDotNetCliPath()
         {
-            if (!Portability.RuntimeInformation.IsLinux())
+            if (!OsDetector.IsLinux())
                 return "dotnet";
 
-            using (var parentProcess = Process.GetProcessById(getppid()))
+            using (var parentProcess = Process.GetProcessById(libc.getppid()))
             {
                 string parentPath = parentProcess.MainModule?.FileName ?? string.Empty;
                 // sth like /snap/dotnet-sdk/112/dotnet and we should use the exact path instead of just "dotnet"
@@ -154,7 +155,26 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
             }
         }
 
-        [DllImport("libc")]
-        private static extern int getppid();
+        internal static string GetSdkPath(string cliPath)
+        {
+            DotNetCliCommand cliCommand = new (
+                cliPath: cliPath,
+                arguments: "--info",
+                generateResult: null,
+                logger: NullLogger.Instance,
+                buildPartition: null,
+                environmentVariables: Array.Empty<EnvironmentVariable>(),
+                timeout: TimeSpan.FromMinutes(1),
+                logOutput: false);
+
+            string sdkPath = Execute(cliCommand)
+                .StandardOutput.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => line.EndsWith("/sdk]")) // sth like "  3.1.423 [/usr/share/dotnet/sdk]
+                .Select(line => line.Split('[')[1])
+                .Distinct()
+                .Single(); // I assume there will be only one such folder
+
+            return sdkPath.Substring(0, sdkPath.Length - 1); // remove trailing `]`
+        }
     }
 }

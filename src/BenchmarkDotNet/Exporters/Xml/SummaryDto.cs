@@ -4,6 +4,7 @@ using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Mathematics;
 using BenchmarkDotNet.Reports;
 using JetBrains.Annotations;
+using Perfolizer.Helpers;
 using Perfolizer.Horology;
 
 // ReSharper disable UnusedMember.Global
@@ -34,11 +35,11 @@ namespace BenchmarkDotNet.Exporters.Xml
     {
         public string BenchmarkDotNetCaption => HostEnvironmentInfo.BenchmarkDotNetCaption;
         public string BenchmarkDotNetVersion => hei.BenchmarkDotNetVersion;
-        public string OsVersion => hei.OsVersion.Value;
-        public string ProcessorName => ProcessorBrandStringHelper.Prettify(hei.CpuInfo.Value);
-        public string PhysicalProcessorCount => hei.CpuInfo.Value?.PhysicalProcessorCount?.ToString();
-        public string PhysicalCoreCount => hei.CpuInfo.Value?.PhysicalCoreCount?.ToString();
-        public string LogicalCoreCount => hei.CpuInfo.Value?.LogicalCoreCount?.ToString();
+        public string OsVersion => hei.Os.Value.ToBrandString();
+        public string ProcessorName => hei.Cpu.Value.ToShortBrandName();
+        public string PhysicalProcessorCount => hei.Cpu.Value?.PhysicalProcessorCount?.ToString();
+        public string PhysicalCoreCount => hei.Cpu.Value?.PhysicalCoreCount?.ToString();
+        public string LogicalCoreCount => hei.Cpu.Value?.LogicalCoreCount?.ToString();
         public string RuntimeVersion => hei.RuntimeVersion;
         public string Architecture => hei.Architecture;
         public bool HasAttachedDebugger => hei.HasAttachedDebugger;
@@ -71,6 +72,8 @@ namespace BenchmarkDotNet.Exporters.Xml
         public string MethodTitle => report.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo;
         public string Parameters => report.BenchmarkCase.Parameters.PrintInfo;
         public Statistics Statistics => report.ResultStatistics;
+        public IEnumerable<Metric> Metrics => report.Metrics.Values;
+
         public GcStats Memory => new GcStats()
         {
             Gen0Collections = report.GcStats.Gen0Collections,
@@ -79,6 +82,7 @@ namespace BenchmarkDotNet.Exporters.Xml
             TotalOperations = report.GcStats.TotalOperations,
             BytesAllocatedPerOperation = report.GcStats.GetBytesAllocatedPerOperation(report.BenchmarkCase)
         };
+
         [PublicAPI] public IEnumerable<Measurement> Measurements { get; }
 
         private readonly BenchmarkReport report;
@@ -102,6 +106,6 @@ namespace BenchmarkDotNet.Exporters.Xml
         public int Gen1Collections { get; set; }
         public int Gen2Collections { get; set; }
         public long TotalOperations { get; set; }
-        public long BytesAllocatedPerOperation { get; set; }
+        public long? BytesAllocatedPerOperation { get; set; }
     }
 }

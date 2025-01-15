@@ -18,7 +18,7 @@ namespace BenchmarkDotNet.Environments
         public RuntimeMoniker RuntimeMoniker { get; }
 
         /// <summary>
-        /// MsBuild Target Framework Moniker, example: net462, netcoreapp2.1
+        /// MsBuild Target Framework Moniker, example: net462, net8.0
         /// </summary>
         public string MsBuildMoniker { get; }
 
@@ -41,6 +41,6 @@ namespace BenchmarkDotNet.Environments
 
         public override bool Equals(object obj) => obj is Runtime other && Equals(other);
 
-        public override int GetHashCode() => Name.GetHashCode() ^ (int)RuntimeMoniker ^ MsBuildMoniker.GetHashCode();
+        public override int GetHashCode() => HashCode.Combine(Name, MsBuildMoniker, RuntimeMoniker);
     }
 }

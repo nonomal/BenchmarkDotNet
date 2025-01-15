@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Extensions;
+using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Reports;
 using JetBrains.Annotations;
@@ -22,24 +23,10 @@ namespace BenchmarkDotNet.Analysers
             var workloadActual = report.AllMeasurements.Where(m => m.Is(IterationMode.Workload, IterationStage.Actual)).ToArray();
             if (workloadActual.IsEmpty())
                 yield break;
-            var result = report.AllMeasurements.Where(m => m.Is(IterationMode.Workload, IterationStage.Result)).ToArray();
             var outlierMode = report.BenchmarkCase.Job.ResolveValue(AccuracyMode.OutlierModeCharacteristic, EngineResolver.Instance); // TODO: improve
             var statistics = workloadActual.GetStatistics();
             var allOutliers = statistics.AllOutliers;
             var actualOutliers = statistics.GetActualOutliers(outlierMode);
-
-            if (result.Length + actualOutliers.Length != workloadActual.Length)
-            {
-                // This should never happen
-                yield return CreateHint(
-                    "Something went wrong with outliers: " +
-                    $"Size(WorkloadActual) = {workloadActual.Length}, " +
-                    $"Size(WorkloadActual/Outliers) = {actualOutliers.Length}, " +
-                    $"Size(Result) = {result.Length}), " +
-                    $"OutlierMode = {outlierMode}",
-                    report);
-                yield break;
-            }
 
             var cultureInfo = summary.GetCultureInfo();
             if (allOutliers.Any())
@@ -55,7 +42,7 @@ namespace BenchmarkDotNet.Analysers
         /// <param name="upperOutliers">All upper outliers</param>
         /// <param name="cultureInfo">CultureInfo</param>
         /// <returns>The message</returns>
-        [PublicAPI, NotNull, Pure]
+        [PublicAPI, Pure]
         public static string GetMessage(double[] actualOutliers, double[] allOutliers, double[] lowerOutliers, double[] upperOutliers, CultureInfo cultureInfo)
         {
             if (allOutliers.Length == 0)
@@ -67,7 +54,7 @@ namespace BenchmarkDotNet.Analysers
                 return $"{n} {words} {verb}";
             }
 
-            var rangeMessages = new List<string> { GetRangeMessage(lowerOutliers, cultureInfo), GetRangeMessage(upperOutliers, cultureInfo) };
+            var rangeMessages = new List<string?> { GetRangeMessage(lowerOutliers), GetRangeMessage(upperOutliers) };
             rangeMessages.RemoveAll(string.IsNullOrEmpty);
             string rangeMessage = rangeMessages.Any()
                 ? " (" + string.Join(", ", rangeMessages) + ")"
@@ -80,21 +67,17 @@ namespace BenchmarkDotNet.Analysers
             return Format(actualOutliers.Length, "removed") + ", " + Format(allOutliers.Length, "detected") + rangeMessage;
         }
 
-        [CanBeNull]
-        private static string GetRangeMessage([NotNull] double[] values, CultureInfo cultureInfo)
+        private static string? GetRangeMessage(double[] values)
         {
-            string Format(double value) => TimeInterval.FromNanoseconds(value).ToString(cultureInfo, "N2");
+            string Format(double value) => TimeInterval.FromNanoseconds(value).ToDefaultString("N2");
 
-            switch (values.Length) {
-                case 0:
-                    return null;
-                case 1:
-                    return Format(values.First());
-                case 2:
-                    return Format(values.Min()) + ", " + Format(values.Max());
-                default:
-                    return Format(values.Min()) + ".." + Format(values.Max());
-            }
+            return values.Length switch
+            {
+                0 => null,
+                1 => Format(values.First()),
+                2 => Format(values.Min()) + ", " + Format(values.Max()),
+                _ => Format(values.Min()) + ".." + Format(values.Max())
+            };
         }
     }
 }

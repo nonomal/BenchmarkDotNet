@@ -6,7 +6,7 @@ namespace BenchmarkDotNet.Validators
 {
     public class ValidationError : IEquatable<ValidationError>
     {
-        public ValidationError(bool isCritical, string message, BenchmarkCase benchmarkCase = null)
+        public ValidationError(bool isCritical, string message, BenchmarkCase? benchmarkCase = null)
         {
             IsCritical = isCritical;
             Message = message;
@@ -15,11 +15,11 @@ namespace BenchmarkDotNet.Validators
 
         [PublicAPI] public bool IsCritical { get; }
         [PublicAPI] public string Message { get; }
-        [PublicAPI] public BenchmarkCase BenchmarkCase { get; }
+        [PublicAPI] public BenchmarkCase? BenchmarkCase { get; }
 
         public override string ToString() => Message;
 
-        public bool Equals(ValidationError other)
+        public bool Equals(ValidationError? other)
         {
             if (ReferenceEquals(null, other))
                 return false;
@@ -28,27 +28,18 @@ namespace BenchmarkDotNet.Validators
             return IsCritical == other.IsCritical && string.Equals(Message, other.Message) && Equals(BenchmarkCase, other.BenchmarkCase);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (ReferenceEquals(null, obj))
                 return false;
             if (ReferenceEquals(this, obj))
                 return true;
-            if (obj.GetType() != this.GetType())
+            if (obj.GetType() != GetType())
                 return false;
-            return Equals((ValidationError) obj);
+            return Equals((ValidationError)obj);
         }
 
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = IsCritical.GetHashCode();
-                hashCode = (hashCode * 397) ^ (Message != null ? Message.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (BenchmarkCase != null ? BenchmarkCase.GetHashCode() : 0);
-                return hashCode;
-            }
-        }
+        public override int GetHashCode() => HashCode.Combine(IsCritical, Message, BenchmarkCase);
 
         public static bool operator ==(ValidationError left, ValidationError right) => Equals(left, right);
 

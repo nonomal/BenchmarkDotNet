@@ -48,7 +48,7 @@ namespace BenchmarkDotNet.Tests.Reports
         private static readonly IDictionary<string, TestData> Data = new Dictionary<string, TestData>
         {
             { "Percentage", new TestData(RatioStyle.Percentage, new[] { 100, 15, 115 }, 1, new[] { "baseline", "-85%", "+15%" }) },
-            { "Trend", new TestData(RatioStyle.Trend, new[] { 100, 15, 115 }, 1, new[] { "baseline", "6.83x faster", "1.15x slower" }) }
+            { "Trend", new TestData(RatioStyle.Trend, new[] { 100, 15, 115 }, 1, new[] { "baseline", "6.84x faster", "1.15x slower" }) }
         };
 
         [UsedImplicitly]
@@ -57,7 +57,7 @@ namespace BenchmarkDotNet.Tests.Reports
         [Theory]
         [MemberData(nameof(DataNames))]
         // First value is baseline, others are benchmark measurements
-        public void RatioPrecisionTestWithBaseline([NotNull] string testDataKey)
+        public void RatioPrecisionTestWithBaseline(string testDataKey)
         {
             var testData = Data[testDataKey];
             var summary = CreateSummary(testData.MeanValues, testData.RatioStyle, testData.Noise);
@@ -111,7 +111,7 @@ namespace BenchmarkDotNet.Tests.Reports
                 new Measurement(1, IterationMode.Workload, IterationStage.Result, 4, 1, measurementValue + 2 * noise),
                 new Measurement(1, IterationMode.Workload, IterationStage.Result, 5, 1, measurementValue - 3 * noise)
             };
-            var executeResult = new ExecuteResult(measurements, default, default);
+            var executeResult = new ExecuteResult(measurements, default, default, 0);
             return new BenchmarkReport(true, benchmarkCase, buildResult, buildResult, new List<ExecuteResult> { executeResult }, Array.Empty<Metric>());
         }
 

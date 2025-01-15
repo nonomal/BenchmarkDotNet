@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Extensions;
@@ -12,6 +11,7 @@ using BenchmarkDotNet.Running;
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.Parsers.Kernel;
 using Microsoft.Diagnostics.Tracing.Stacks;
+using Perfolizer.Metrology;
 using Address = System.UInt64;
 
 namespace BenchmarkDotNet.Diagnostics.Windows.Tracing
@@ -95,7 +95,7 @@ namespace BenchmarkDotNet.Diagnostics.Windows.Tracing
             var heapParser = new HeapTraceProviderTraceEventParser(eventSource);
             // We index by heap address and then within the heap we remember the allocation stack
             var heaps = new Dictionary<Address, Dictionary<Address, long>>();
-            Dictionary<Address, long> lastHeapAllocs = null;
+            Dictionary<Address, long>? lastHeapAllocs = null;
 
             Address lastHeapHandle = 0;
 
@@ -217,7 +217,7 @@ namespace BenchmarkDotNet.Diagnostics.Windows.Tracing
                     return;
                 }
 
-                // Heap is dieing, kill all objects in it.
+                // Heap is dying, kill all objects in it.
                 var allocs = lastHeapAllocs;
                 if (data.HeapHandle != lastHeapHandle)
                 {
@@ -246,12 +246,14 @@ namespace BenchmarkDotNet.Diagnostics.Windows.Tracing
             var memoryAllocatedPerOperation = totalAllocation / totalOperation;
             var memoryLeakPerOperation = nativeLeakSize / totalOperation;
 
-            logger.WriteLine($"Native memory allocated per single operation: {SizeValue.FromBytes(memoryAllocatedPerOperation).ToString(SizeUnit.B, benchmarkCase.Config.CultureInfo)}");
+            logger.WriteLine(
+                $"Native memory allocated per single operation: {SizeValue.FromBytes(memoryAllocatedPerOperation).ToString(SizeUnit.B, null, benchmarkCase.Config.CultureInfo)}");
             logger.WriteLine($"Count of allocated object: {countOfAllocatedObject / totalOperation}");
 
             if (nativeLeakSize != 0)
             {
-                logger.WriteLine($"Native memory leak per single operation: {SizeValue.FromBytes(memoryLeakPerOperation).ToString(SizeUnit.B, benchmarkCase.Config.CultureInfo)}");
+                logger.WriteLine(
+                    $"Native memory leak per single operation: {SizeValue.FromBytes(memoryLeakPerOperation).ToString(SizeUnit.B, null, benchmarkCase.Config.CultureInfo)}");
             }
 
             var heapInfoList = heaps.Select(h => new { Address = h.Key, h.Value.Count, types = h.Value.Values });
@@ -262,12 +264,13 @@ namespace BenchmarkDotNet.Diagnostics.Windows.Tracing
 
             return new[]
             {
-                new Metric(new AllocatedNativeMemoryDescriptor(), memoryAllocatedPerOperation),
-                new Metric(new NativeMemoryLeakDescriptor(), memoryLeakPerOperation)
+                new Metric(AllocatedNativeMemoryDescriptor.Instance, memoryAllocatedPerOperation),
+                new Metric(NativeMemoryLeakDescriptor.Instance, memoryLeakPerOperation)
             };
         }
 
-        private static Dictionary<Address, long> CreateHeapCache(Address heapHandle, Dictionary<Address, Dictionary<Address, long>> heaps, ref Dictionary<Address, long> lastHeapAllocs, ref Address lastHeapHandle)
+        private static Dictionary<Address, long> CreateHeapCache(Address heapHandle, Dictionary<Address, Dictionary<Address, long>> heaps,
+            ref Dictionary<Address, long> lastHeapAllocs, ref Address lastHeapHandle)
         {
             Dictionary<Address, long> ret;
 

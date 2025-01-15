@@ -6,6 +6,7 @@ using System.Linq;
 using BenchmarkDotNet.Analysers;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Diagnosers;
+using BenchmarkDotNet.EventProcessors;
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Filters;
 using BenchmarkDotNet.Jobs;
@@ -14,7 +15,6 @@ using BenchmarkDotNet.Order;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Validators;
-using JetBrains.Annotations;
 using RunMode = BenchmarkDotNet.Diagnosers.RunMode;
 
 namespace BenchmarkDotNet.Configs
@@ -32,6 +32,7 @@ namespace BenchmarkDotNet.Configs
         private readonly ImmutableHashSet<HardwareCounter> hardwareCounters;
         private readonly ImmutableHashSet<IFilter> filters;
         private readonly ImmutableArray<BenchmarkLogicalGroupRule> rules;
+        private readonly ImmutableHashSet<EventProcessor> eventProcessors;
         private readonly ImmutableArray<IColumnHidingRule> columnHidingRules;
 
         internal ImmutableConfig(
@@ -46,10 +47,12 @@ namespace BenchmarkDotNet.Configs
             ImmutableArray<BenchmarkLogicalGroupRule> uniqueRules,
             ImmutableArray<IColumnHidingRule> uniqueColumnHidingRules,
             ImmutableHashSet<Job> uniqueRunnableJobs,
+            ImmutableHashSet<EventProcessor> uniqueEventProcessors,
             ConfigUnionRule unionRule,
             string artifactsPath,
             CultureInfo cultureInfo,
             IOrderer orderer,
+            ICategoryDiscoverer categoryDiscoverer,
             SummaryStyle summaryStyle,
             ConfigOptions options,
             TimeSpan buildTimeout,
@@ -66,10 +69,12 @@ namespace BenchmarkDotNet.Configs
             rules = uniqueRules;
             columnHidingRules = uniqueColumnHidingRules;
             jobs = uniqueRunnableJobs;
+            eventProcessors = uniqueEventProcessors;
             UnionRule = unionRule;
             ArtifactsPath = artifactsPath;
             CultureInfo = cultureInfo;
             Orderer = orderer;
+            CategoryDiscoverer = categoryDiscoverer;
             SummaryStyle = summaryStyle;
             Options = options;
             BuildTimeout = buildTimeout;
@@ -80,7 +85,8 @@ namespace BenchmarkDotNet.Configs
         public string ArtifactsPath { get; }
         public CultureInfo CultureInfo { get; }
         public ConfigOptions Options { get; }
-        [NotNull] public IOrderer Orderer { get; }
+        public IOrderer Orderer { get; }
+        public ICategoryDiscoverer CategoryDiscoverer { get; }
         public SummaryStyle SummaryStyle { get; }
         public TimeSpan BuildTimeout { get; }
 
@@ -94,6 +100,7 @@ namespace BenchmarkDotNet.Configs
         public IEnumerable<HardwareCounter> GetHardwareCounters() => hardwareCounters;
         public IEnumerable<IFilter> GetFilters() => filters;
         public IEnumerable<BenchmarkLogicalGroupRule> GetLogicalGroupRules() => rules;
+        public IEnumerable<EventProcessor> GetEventProcessors() => eventProcessors;
         public IEnumerable<IColumnHidingRule> GetColumnHidingRules() => columnHidingRules;
 
         public ILogger GetCompositeLogger() => new CompositeLogger(loggers);
@@ -106,9 +113,13 @@ namespace BenchmarkDotNet.Configs
 
         public bool HasThreadingDiagnoser() => diagnosers.Contains(ThreadingDiagnoser.Default);
 
-        public bool HasExtraStatsDiagnoser() => HasMemoryDiagnoser() || HasThreadingDiagnoser();
+        public bool HasExceptionDiagnoser() => diagnosers.Contains(ExceptionDiagnoser.Default);
 
-        public IDiagnoser GetCompositeDiagnoser(BenchmarkCase benchmarkCase, RunMode runMode)
+        internal bool HasPerfCollectProfiler() => diagnosers.OfType<PerfCollectProfiler>().Any();
+
+        public bool HasExtraStatsDiagnoser() => HasMemoryDiagnoser() || HasThreadingDiagnoser() || HasExceptionDiagnoser();
+
+        public IDiagnoser? GetCompositeDiagnoser(BenchmarkCase benchmarkCase, RunMode runMode)
         {
             var diagnosersForGivenMode = diagnosers.Where(diagnoser => diagnoser.GetRunMode(benchmarkCase) == runMode).ToImmutableHashSet();
 

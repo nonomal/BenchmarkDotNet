@@ -37,6 +37,9 @@ namespace BenchmarkDotNet.ConsoleArguments
         [Option('t', "threading", Required = false, Default = false, HelpText = "Prints threading statistics")]
         public bool UseThreadingDiagnoser { get; set; }
 
+        [Option("exceptions", Required = false, Default = false, HelpText = "Prints exception statistics")]
+        public bool UseExceptionDiagnoser { get; set; }
+
         [Option('d', "disasm", Required = false, Default = false, HelpText = "Gets disassembly of benchmarked code")]
         public bool UseDisassemblyDiagnoser
         {
@@ -215,6 +218,12 @@ namespace BenchmarkDotNet.ConsoleArguments
         [Option("noForcedGCs", Required = false, HelpText = "Specifying would not forcefully induce any GCs.")]
         public bool NoForcedGCs { get; set; }
 
+        [Option("noOverheadEvaluation", Required = false, HelpText = "Specifying would not run the evaluation overhead iterations.")]
+        public bool NoEvaluationOverhead { get; set; }
+
+        [Option("resume", Required = false, Default = false, HelpText = "Continue the execution if the last run was stopped.")]
+        public bool Resume { get; set; }
+
         internal bool UserProvidedFilters => Filters.Any() || AttributeNames.Any() || AllCategories.Any() || AnyCategories.Any();
 
         [Usage(ApplicationAlias = "")]
@@ -228,8 +237,8 @@ namespace BenchmarkDotNet.ConsoleArguments
 
                 yield return new Example("Use Job.ShortRun for running the benchmarks", shortName, new CommandLineOptions { BaseJob = "short" });
                 yield return new Example("Run benchmarks in process", shortName, new CommandLineOptions { RunInProcess = true });
-                yield return new Example("Run benchmarks for .NET 4.7.2, .NET Core 2.1 and Mono. .NET 4.7.2 will be baseline because it was first.", longName, new CommandLineOptions { Runtimes = new[] { "net472", "netcoreapp2.1", "Mono" } });
-                yield return new Example("Run benchmarks for .NET Core 2.0, .NET Core 2.1 and .NET Core 2.2. .NET Core 2.0 will be baseline because it was first.", longName, new CommandLineOptions { Runtimes = new[] { "netcoreapp2.0", "netcoreapp2.1", "netcoreapp2.2" } });
+                yield return new Example("Run benchmarks for .NET 4.7.2, .NET 8.0 and Mono. .NET 4.7.2 will be baseline because it was first.", longName, new CommandLineOptions { Runtimes = new[] { "net472", "net8.0", "Mono" } });
+                yield return new Example("Run benchmarks for .NET Core 3.1, .NET 6.0 and .NET 8.0. .NET Core 3.1 will be baseline because it was first.", longName, new CommandLineOptions { Runtimes = new[] { "netcoreapp3.1", "net6.0", "net8.0" } });
                 yield return new Example("Use MemoryDiagnoser to get GC stats", shortName, new CommandLineOptions { UseMemoryDiagnoser = true });
                 yield return new Example("Use DisassemblyDiagnoser to get disassembly", shortName, new CommandLineOptions { UseDisassemblyDiagnoser = true });
                 yield return new Example("Use HardwareCountersDiagnoser to get hardware counter info", longName, new CommandLineOptions { HardwareCounters = new[] { nameof(HardwareCounter.CacheMisses), nameof(HardwareCounter.InstructionRetired) } });
@@ -241,8 +250,8 @@ namespace BenchmarkDotNet.ConsoleArguments
                 yield return new Example("Run selected benchmarks once per iteration", longName, new CommandLineOptions { RunOncePerIteration = true });
                 yield return new Example("Run selected benchmarks 100 times per iteration. Perform single warmup iteration and 5 actual workload iterations", longName, new CommandLineOptions { InvocationCount = 100, WarmupIterationCount = 1, IterationCount = 5});
                 yield return new Example("Run selected benchmarks 250ms per iteration. Perform from 9 to 15 iterations", longName, new CommandLineOptions { IterationTimeInMilliseconds = 250, MinIterationCount = 9, MaxIterationCount = 15});
-                yield return new Example("Run MannWhitney test with relative ratio of 5% for all benchmarks for .NET Core 2.0 (base) vs .NET Core 2.1 (diff). .NET Core 2.0 will be baseline because it was provided as first.", longName,
-                    new CommandLineOptions { Filters = new[] { "*"}, Runtimes = new[] { "netcoreapp2.0", "netcoreapp2.1" }, StatisticalTestThreshold = "5%" });
+                yield return new Example("Run MannWhitney test with relative ratio of 5% for all benchmarks for .NET 6.0 (base) vs .NET 8.0 (diff). .NET Core 6.0 will be baseline because it was provided as first.", longName,
+                    new CommandLineOptions { Filters = new[] { "*"}, Runtimes = new[] { "net6.0", "net8.0" }, StatisticalTestThreshold = "5%" });
                 yield return new Example("Run benchmarks using environment variables 'ENV_VAR_KEY_1' with value 'value_1' and 'ENV_VAR_KEY_2' with value 'value_2'", longName,
                     new CommandLineOptions { EnvironmentVariables = new[] { "ENV_VAR_KEY_1:value_1", "ENV_VAR_KEY_2:value_2" } });
                 yield return new Example("Hide Mean and Ratio columns (use double quotes for multi-word columns: \"Alloc Ratio\")", shortName, new CommandLineOptions { HiddenColumns = new[] { "Mean", "Ratio" }, });

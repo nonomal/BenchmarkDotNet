@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Portability;
 using BenchmarkDotNet.Toolchains.InProcess.Emit;
@@ -31,7 +32,7 @@ namespace BenchmarkDotNet.Diagnostics.Windows
 
         public static IEnumerable<ValidationError> Validate(ValidationParameters validationParameters, bool mandatory)
         {
-            if (!RuntimeInformation.IsWindows())
+            if (!OsDetector.IsWindows())
             {
                 yield return new ValidationError(true, "Hardware Counters and EtwProfiler are supported only on Windows");
                 yield break;
@@ -50,8 +51,14 @@ namespace BenchmarkDotNet.Diagnostics.Windows
 
             foreach (var hardwareCounter in validationParameters.Config.GetHardwareCounters())
             {
-                if (!EtwTranslations.TryGetValue(hardwareCounter, out var counterName))
-                    yield return new ValidationError(true, $"Counter {hardwareCounter} not recognized. Please make sure that you are using counter available on your machine. You can get the list of available counters by running `tracelog.exe -profilesources Help`");
+                if (!EtwTranslations.TryGetValue(hardwareCounter, out string counterName))
+                {
+                    yield return new ValidationError(true,
+                        $"Counter {hardwareCounter} not recognized. " +
+                        $"Please make sure that you are using counter available on your machine. " +
+                        $"You can get the list of available counters by running `tracelog.exe -profilesources Help`");
+                    continue;
+                }
 
                 if (!availableCpuCounters.ContainsKey(counterName))
                     yield return new ValidationError(true, $"The counter {counterName} is not available. Please make sure you are Windows 8+ without Hyper-V");

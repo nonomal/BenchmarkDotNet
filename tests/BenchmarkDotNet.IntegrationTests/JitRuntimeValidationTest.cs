@@ -1,11 +1,12 @@
-﻿using System.Linq;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Portability;
 using BenchmarkDotNet.Tests.Loggers;
 using BenchmarkDotNet.Tests.XUnit;
+using System.Collections.Generic;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -19,12 +20,12 @@ namespace BenchmarkDotNet.IntegrationTests
         private const string RyuJitNotAvailable = "// ERROR:  RyuJIT is requested but it is not available in current environment";
         private const string ToolchainSupportsOnlyRyuJit = "Currently dotnet cli toolchain supports only RyuJit";
 
-        [TheoryWindowsOnly("CLR is a valid job only on Windows")]
+        [TheoryEnvSpecific("CLR is a valid job only on Windows", EnvRequirement.WindowsOnly)]
         [InlineData(Jit.LegacyJit, Platform.X86, null)]
         [InlineData(Jit.LegacyJit, Platform.X64, null)]
         [InlineData(Jit.RyuJit, Platform.X86, RyuJitNotAvailable)]
         [InlineData(Jit.RyuJit, Platform.X64, null)]
-        public void CheckClrOnWindows(Jit jit, Platform platform, string errorMessage)
+        public void CheckClrOnWindows(Jit jit, Platform platform, string? errorMessage)
         {
             Verify(ClrRuntime.Net462, jit, platform, errorMessage);
         }
@@ -39,16 +40,21 @@ namespace BenchmarkDotNet.IntegrationTests
 //          Verify(Runtime.Mono, jit, platform, errorMessage);
 //      }
 
-        [Theory]
-        [InlineData(Jit.LegacyJit, Platform.X86, ToolchainSupportsOnlyRyuJit)]
-        [InlineData(Jit.LegacyJit, Platform.X64, ToolchainSupportsOnlyRyuJit)]
-        [InlineData(Jit.RyuJit, Platform.X64, null)]
-        public void CheckCore(Jit jit, Platform platform, string errorMessage)
+        public static IEnumerable<object[]> CheckCore_Arguments()
         {
-            Verify(CoreRuntime.Core60, jit, platform, errorMessage);
+            yield return new object[] { Jit.LegacyJit, Platform.X86, ToolchainSupportsOnlyRyuJit };
+            yield return new object[] { Jit.LegacyJit, Platform.X64, ToolchainSupportsOnlyRyuJit };
+            yield return new object[] { Jit.RyuJit, RuntimeInformation.GetCurrentPlatform(), null };
         }
 
-        private void Verify(Runtime runtime, Jit jit, Platform platform, string errorMessage)
+        [Theory]
+        [MemberData(nameof(CheckCore_Arguments))]
+        public void CheckCore(Jit jit, Platform platform, string errorMessage)
+        {
+            Verify(CoreRuntime.Core80, jit, platform, errorMessage);
+        }
+
+        private void Verify(Runtime runtime, Jit jit, Platform platform, string? errorMessage)
         {
             var logger = new OutputLogger(Output);
             var config = ManualConfig.CreateEmpty()

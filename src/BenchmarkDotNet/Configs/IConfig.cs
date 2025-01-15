@@ -4,14 +4,15 @@ using System.Globalization;
 using BenchmarkDotNet.Analysers;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Diagnosers;
+using BenchmarkDotNet.EventProcessors;
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Filters;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Order;
 using BenchmarkDotNet.Reports;
+using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Validators;
-using JetBrains.Annotations;
 
 namespace BenchmarkDotNet.Configs
 {
@@ -27,9 +28,11 @@ namespace BenchmarkDotNet.Configs
         IEnumerable<HardwareCounter> GetHardwareCounters();
         IEnumerable<IFilter> GetFilters();
         IEnumerable<BenchmarkLogicalGroupRule> GetLogicalGroupRules();
+        IEnumerable<EventProcessor> GetEventProcessors();
         IEnumerable<IColumnHidingRule> GetColumnHidingRules();
 
-        [CanBeNull] IOrderer Orderer { get; }
+        IOrderer? Orderer { get; }
+        ICategoryDiscoverer? CategoryDiscoverer { get; }
 
         SummaryStyle SummaryStyle { get; }
 
@@ -40,8 +43,7 @@ namespace BenchmarkDotNet.Configs
         /// </summary>
         string ArtifactsPath { get; }
 
-        [CanBeNull]
-        CultureInfo CultureInfo { get; }
+        CultureInfo? CultureInfo { get; }
 
         /// <summary>
         /// a set of custom flags that can enable/disable various settings

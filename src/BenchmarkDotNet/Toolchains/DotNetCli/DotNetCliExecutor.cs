@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
@@ -69,7 +68,7 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
             var startInfo = DotNetCliCommandExecutor.BuildStartInfo(
                 CustomDotNetCliPath,
                 artifactsPaths.BinariesDirectoryPath,
-                $"{executableName.Escape()} {benchmarkId.ToArguments(inputFromBenchmark.GetClientHandleAsString(), acknowledgments.GetClientHandleAsString())}",
+                $"{executableName.EscapeCommandLine()} {benchmarkId.ToArguments(inputFromBenchmark.GetClientHandleAsString(), acknowledgments.GetClientHandleAsString())}",
                 redirectStandardOutput: true,
                 redirectStandardInput: false,
                 redirectStandardError: false); // #1629
@@ -84,9 +83,12 @@ namespace BenchmarkDotNet.Toolchains.DotNetCli
 
                 logger.WriteLineInfo($"// Execute: {process.StartInfo.FileName} {process.StartInfo.Arguments} in {process.StartInfo.WorkingDirectory}");
 
-                diagnoser?.Handle(HostSignal.BeforeProcessStart, new DiagnoserActionParameters(process, benchmarkCase, benchmarkId));
+                diagnoser?.Handle(HostSignal.BeforeProcessStart, broker.DiagnoserActionParameters);
 
                 process.Start();
+
+                diagnoser?.Handle(HostSignal.AfterProcessStart, broker.DiagnoserActionParameters);
+
                 processOutputReader.BeginRead();
 
                 process.EnsureHighPriority(logger);

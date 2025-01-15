@@ -4,7 +4,9 @@ using System.Globalization;
 using System.IO;
 using BenchmarkDotNet.Analysers;
 using BenchmarkDotNet.Columns;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Diagnosers;
+using BenchmarkDotNet.EventProcessors;
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Filters;
@@ -13,6 +15,7 @@ using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Order;
 using BenchmarkDotNet.Portability;
 using BenchmarkDotNet.Reports;
+using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Validators;
 
 namespace BenchmarkDotNet.Configs
@@ -68,9 +71,11 @@ namespace BenchmarkDotNet.Configs
             yield return GenericBenchmarksValidator.DontFailOnError;
             yield return DeferredExecutionValidator.FailOnError;
             yield return ParamsAllValuesValidator.FailOnError;
+            yield return ParamsValidator.FailOnError;
         }
 
         public IOrderer Orderer => null;
+        public ICategoryDiscoverer? CategoryDiscoverer => null;
 
         public ConfigUnionRule UnionRule => ConfigUnionRule.Union;
 
@@ -86,7 +91,7 @@ namespace BenchmarkDotNet.Configs
         {
             get
             {
-                var root = RuntimeInformation.IsAndroid() ?
+                var root = OsDetector.IsAndroid() ?
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) :
                     Directory.GetCurrentDirectory();
                 return Path.Combine(root, "BenchmarkDotNet.Artifacts");
@@ -104,6 +109,8 @@ namespace BenchmarkDotNet.Configs
         public IEnumerable<HardwareCounter> GetHardwareCounters() => Array.Empty<HardwareCounter>();
 
         public IEnumerable<IFilter> GetFilters() => Array.Empty<IFilter>();
+
+        public IEnumerable<EventProcessor> GetEventProcessors() => Array.Empty<EventProcessor>();
 
         public IEnumerable<IColumnHidingRule> GetColumnHidingRules() => Array.Empty<IColumnHidingRule>();
     }

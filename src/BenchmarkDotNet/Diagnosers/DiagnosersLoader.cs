@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Portability;
 
@@ -37,9 +38,14 @@ namespace BenchmarkDotNet.Diagnosers
             yield return new DisassemblyDiagnoser(new DisassemblyDiagnoserConfig());
 
             if (RuntimeInformation.IsNetCore)
+            {
                 yield return EventPipeProfiler.Default;
 
-            if (!RuntimeInformation.IsWindows())
+                if (OsDetector.IsLinux())
+                    yield return PerfCollectProfiler.Default;
+            }
+
+            if (!OsDetector.IsWindows())
                 yield break;
 
             foreach (var windowsDiagnoser in LoadWindowsDiagnosers())
@@ -68,10 +74,17 @@ namespace BenchmarkDotNet.Diagnosers
                 return new[]
                 {
                     CreateDiagnoser(diagnosticsAssembly, "BenchmarkDotNet.Diagnostics.Windows.InliningDiagnoser"),
+                    CreateDiagnoser(diagnosticsAssembly, "BenchmarkDotNet.Diagnostics.Windows.TailCallDiagnoser"),
+                    CreateDiagnoser(diagnosticsAssembly, "BenchmarkDotNet.Diagnostics.Windows.JitStatsDiagnoser"),
                     CreateDiagnoser(diagnosticsAssembly, "BenchmarkDotNet.Diagnostics.Windows.EtwProfiler"),
                     CreateDiagnoser(diagnosticsAssembly, "BenchmarkDotNet.Diagnostics.Windows.ConcurrencyVisualizerProfiler"),
                     CreateDiagnoser(diagnosticsAssembly, "BenchmarkDotNet.Diagnostics.Windows.NativeMemoryProfiler")
                 };
+            }
+            catch (Exception ex) when (ex is FileNotFoundException || ex is BadImageFormatException)
+            {
+                // Return an array of UnresolvedDiagnoser objects when the assembly does not contain the requested diagnoser
+                return new[] { GetUnresolvedDiagnoser<IDiagnoser>() };
             }
             catch (Exception ex) // we're loading a plug-in, better to be safe rather than sorry
             {

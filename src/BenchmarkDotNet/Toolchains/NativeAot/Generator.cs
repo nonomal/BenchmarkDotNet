@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml;
+using BenchmarkDotNet.ConsoleArguments;
+using BenchmarkDotNet.Detectors;
+using BenchmarkDotNet.Detectors.Cpu;
 using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Extensions;
+using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Portability;
-using BenchmarkDotNet.Portability.Cpu;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.CsProj;
 using BenchmarkDotNet.Toolchains.DotNetCli;
@@ -56,7 +59,7 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
         private readonly string ilcOptimizationPreference;
         private readonly string ilcInstructionSet;
 
-        protected override string GetExecutableExtension() => RuntimeInformation.ExecutableExtension;
+        protected override string GetExecutableExtension() => OsDetector.ExecutableExtension;
 
         protected override string GetBuildArtifactsDirectoryPath(BuildPartition buildPartition, string programName)
             => useTempFolderForRestore
@@ -72,7 +75,6 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
 
             var content = new StringBuilder(300)
                 .AppendLine($"call {CliPath ?? "dotnet"} {DotNetCliCommand.GetRestoreCommand(artifactsPaths, buildPartition, extraArguments)}")
-                .AppendLine($"call {CliPath ?? "dotnet"} {DotNetCliCommand.GetBuildCommand(artifactsPaths, buildPartition, extraArguments)}")
                 .AppendLine($"call {CliPath ?? "dotnet"} {DotNetCliCommand.GetPublishCommand(artifactsPaths, buildPartition, extraArguments)}")
                 .ToString();
 
@@ -132,11 +134,12 @@ $@"<?xml version=""1.0"" encoding=""utf-8""?>
     <UseSharedCompilation>false</UseSharedCompilation>
     <Deterministic>true</Deterministic>
     <RunAnalyzers>false</RunAnalyzers>
-    <PublishAot Condition="" '$(TargetFramework)' != 'net6.0' "">true</PublishAot>
+    <PublishAot Condition=""$([MSBuild]::VersionGreaterThan('$(NETCoreSdkVersion)', '6.0'))"">true</PublishAot>
     <IlcOptimizationPreference>{ilcOptimizationPreference}</IlcOptimizationPreference>
+    <OptimizationPreference>{ilcOptimizationPreference}</OptimizationPreference>
     {GetTrimmingSettings()}
-    <IlcGenerateCompleteTypeMetadata>{ilcGenerateCompleteTypeMetadata}</IlcGenerateCompleteTypeMetadata>
     <IlcGenerateStackTraceData>{ilcGenerateStackTraceData}</IlcGenerateStackTraceData>
+    <StackTraceSupport>{ilcGenerateStackTraceData}</StackTraceSupport>
     <EnsureNETCoreAppRuntime>false</EnsureNETCoreAppRuntime> <!-- workaround for 'This runtime may not be supported by.NET Core.' error -->
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles> <!-- workaround for 'Found multiple publish output files with the same relative path.' error -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
@@ -153,14 +156,27 @@ $@"<?xml version=""1.0"" encoding=""utf-8""?>
   <ItemGroup>
     {string.Join(Environment.NewLine, GetRdXmlFiles(buildPartition.RepresentativeBenchmarkCase.Descriptor.Type, logger).Select(file => $"<RdXmlFile Include=\"{file}\" />"))}
   </ItemGroup>
+{GetCustomProperties(buildPartition, logger)}
 </Project>";
+
+        private string GetCustomProperties(BuildPartition buildPartition, ILogger logger)
+        {
+            var projectFile = GetProjectFilePath(buildPartition.RepresentativeBenchmarkCase.Descriptor.Type, logger);
+            var xmlDoc = new XmlDocument();
+            xmlDoc.Load(projectFile.FullName);
+
+            (string customProperties, _) = GetSettingsThatNeedToBeCopied(xmlDoc, projectFile);
+            return customProperties;
+        }
+
 
         private string GetILCompilerPackageReference()
             => string.IsNullOrEmpty(ilCompilerVersion) ? "" : $@"<PackageReference Include=""Microsoft.DotNet.ILCompiler"" Version=""{ilCompilerVersion}"" />";
 
         private string GetTrimmingSettings()
             => rootAllApplicationAssemblies
-                ? "" // use the defaults
+                // Use the defaults
+                ? ""
                 // TrimMode is set in explicit way as for older versions it might have different default value
                 : "<TrimMode>link</TrimMode><TrimmerDefaultAction>link</TrimmerDefaultAction>";
 
@@ -220,8 +236,20 @@ $@"<?xml version=""1.0"" encoding=""utf-8""?>
             => string.Join(",", GetCurrentProcessInstructionSets(platform));
 
         // based on https://github.com/dotnet/runtime/blob/ce61c09a5f6fc71d8f717d3fc4562f42171869a0/src/coreclr/tools/Common/JitInterface/CorInfoInstructionSet.cs#L727
-        private static IEnumerable<string> GetCurrentProcessInstructionSets(Platform platform)
+        private IEnumerable<string> GetCurrentProcessInstructionSets(Platform platform)
         {
+            if (!ConfigParser.TryParse(TargetFrameworkMoniker, out RuntimeMoniker runtimeMoniker))
+            {
+                throw new NotSupportedException($"Invalid TFM: '{TargetFrameworkMoniker}'");
+            }
+
+            if (platform == RuntimeInformation.GetCurrentPlatform() // "native" does not support cross-compilation (so does BDN for now)
+                && runtimeMoniker >= RuntimeMoniker.NativeAot80)
+            {
+                yield return "native"; // added in .NET 8 https://github.com/dotnet/runtime/pull/87865
+                yield break;
+            }
+
             switch (platform)
             {
                 case Platform.X86:
@@ -235,6 +263,11 @@ $@"<?xml version=""1.0"" encoding=""utf-8""?>
                     if (HardwareIntrinsics.IsX86Sse42Supported) yield return "sse4.2";
                     if (HardwareIntrinsics.IsX86AvxSupported) yield return "avx";
                     if (HardwareIntrinsics.IsX86Avx2Supported) yield return "avx2";
+                    if (HardwareIntrinsics.IsX86Avx512FSupported) yield return "avx512f";
+                    if (HardwareIntrinsics.IsX86Avx512BWSupported) yield return "avx512bw";
+                    if (HardwareIntrinsics.IsX86Avx512CDSupported) yield return "avx512cd";
+                    if (HardwareIntrinsics.IsX86Avx512DQSupported) yield return "avx512dq";
+                    if (HardwareIntrinsics.IsX86Avx512VbmiSupported) yield return "avx512vbmi";
                     if (HardwareIntrinsics.IsX86AesSupported) yield return "aes";
                     if (HardwareIntrinsics.IsX86Bmi1Supported) yield return "bmi";
                     if (HardwareIntrinsics.IsX86Bmi2Supported) yield return "bmi2";
@@ -243,7 +276,7 @@ $@"<?xml version=""1.0"" encoding=""utf-8""?>
                     if (HardwareIntrinsics.IsX86PclmulqdqSupported) yield return "pclmul";
                     if (HardwareIntrinsics.IsX86PopcntSupported) yield return "popcnt";
                     if (HardwareIntrinsics.IsX86AvxVnniSupported) yield return "avxvnni";
-                    if (HardwareIntrinsics.IsX86SerializeSupported) yield return "serialize";
+                    if (HardwareIntrinsics.IsX86SerializeSupported && runtimeMoniker > RuntimeMoniker.NativeAot70) yield return "serialize"; // https://github.com/dotnet/BenchmarkDotNet/issues/2463#issuecomment-1809625008
                     break;
                 case Platform.Arm64:
                     if (HardwareIntrinsics.IsArmBaseSupported) yield return "base";

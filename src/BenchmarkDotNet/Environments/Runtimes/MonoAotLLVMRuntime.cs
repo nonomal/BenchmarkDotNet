@@ -20,7 +20,7 @@ namespace BenchmarkDotNet.Environments
         /// <summary>
         /// creates new instance of MonoAotLLVMRuntime
         /// </summary>
-        public MonoAotLLVMRuntime(FileInfo aotCompilerPath, MonoAotCompilerMode aotCompilerMode, string msBuildMoniker = "net6.0", string displayName = "MonoAOTLLVM") : base(RuntimeMoniker.MonoAOTLLVM, msBuildMoniker, displayName)
+        public MonoAotLLVMRuntime(FileInfo aotCompilerPath, MonoAotCompilerMode aotCompilerMode, string msBuildMoniker = "net6.0", string displayName = "MonoAOTLLVM", RuntimeMoniker moniker = RuntimeMoniker.MonoAOTLLVM) : base(moniker, msBuildMoniker, displayName)
         {
             if (aotCompilerPath == null)
                 throw new ArgumentNullException(paramName: nameof(aotCompilerPath));
@@ -44,6 +44,6 @@ namespace BenchmarkDotNet.Environments
             => other != null && base.Equals(other) && other.AOTCompilerPath == AOTCompilerPath;
 
         public override int GetHashCode()
-            => base.GetHashCode() ^ AOTCompilerPath.GetHashCode();
+            => HashCode.Combine(base.GetHashCode(), AOTCompilerPath);
     }
 }

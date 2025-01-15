@@ -10,7 +10,6 @@ using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Portability;
 using BenchmarkDotNet.Running;
-using JetBrains.Annotations;
 
 namespace BenchmarkDotNet.Disassemblers
 {
@@ -50,7 +49,7 @@ namespace BenchmarkDotNet.Disassemblers
 
         internal static class OutputParser
         {
-            internal static DisassemblyResult Parse([ItemCanBeNull] IReadOnlyList<string> input, string methodName, string commandLine)
+            internal static DisassemblyResult Parse(IReadOnlyList<string?> input, string methodName, string commandLine)
             {
                 var instructions = new List<MonoCode>();
 
@@ -101,7 +100,7 @@ namespace BenchmarkDotNet.Disassemblers
                 };
             }
 
-            private static DisassemblyResult CreateErrorResult([ItemCanBeNull] IReadOnlyList<string> input,
+            private static DisassemblyResult CreateErrorResult(IReadOnlyList<string?> input,
                 string methodName, string commandLine, string message)
             {
                 return new DisassemblyResult
@@ -129,7 +128,7 @@ namespace BenchmarkDotNet.Disassemblers
             //line example 2: 0000000000000000  subq    $0x28, %rsp
             private static readonly Regex InstructionRegex = new Regex(@"\s*(?<address>[0-9a-f]+)(\:\s+([0-9a-f]{2}\s+)+)?\s+(?<instruction>.*)\s*", RegexOptions.Compiled);
 
-            private static bool TryParseInstruction(string line, out MonoCode instruction)
+            private static bool TryParseInstruction(string line, out MonoCode? instruction)
             {
                 instruction = null;
                 var match = InstructionRegex.Match(line);

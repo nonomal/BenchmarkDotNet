@@ -25,13 +25,14 @@ namespace BenchmarkDotNet.Analysers
 
             foreach (var benchmarkCase in summary.BenchmarksCases)
             {
-                string logicalGroupKey = summary.GetLogicalGroupKey(benchmarkCase);
+                string? logicalGroupKey = summary.GetLogicalGroupKey(benchmarkCase);
                 var baseline = summary.GetBaseline(logicalGroupKey);
                 if (BaselineCustomColumn.ResultsAreInvalid(summary, benchmarkCase, baseline) == false)
                     continue;
 
                 var message = "A question mark '?' symbol indicates that it was not possible to compute the " +
-                                $"({columnNames}) column(s) because the baseline value is too close to zero.";
+                                $"({columnNames}) column(s) because the baseline or benchmark could not be found, or " +
+                                $"the baseline value is too close to zero.";
 
                 yield return Conclusion.CreateWarning(Id, message);
             }

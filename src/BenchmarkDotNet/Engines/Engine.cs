@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -41,6 +40,7 @@ namespace BenchmarkDotNet.Engines
         private bool EvaluateOverhead { get; }
         private bool MemoryRandomization { get; }
 
+        private readonly List<Measurement> jittingMeasurements = new (10);
         private readonly EnginePilotStage pilotStage;
         private readonly EngineWarmupStage warmupStage;
         private readonly EngineActualStage actualStage;
@@ -104,8 +104,10 @@ namespace BenchmarkDotNet.Engines
 
         public RunResults Run()
         {
+            var measurements = new List<Measurement>();
+            measurements.AddRange(jittingMeasurements);
+
             long invokeCount = TargetJob.ResolveValue(RunMode.InvocationCountCharacteristic, Resolver, 1);
-            IReadOnlyList<Measurement> idle = null;
 
             if (EngineEventSource.Log.IsEnabled())
                 EngineEventSource.Log.BenchmarkStart(BenchmarkName);
@@ -114,34 +116,36 @@ namespace BenchmarkDotNet.Engines
             {
                 if (Strategy != RunStrategy.Monitoring)
                 {
-                    invokeCount = pilotStage.Run();
+                    var pilotStageResult = pilotStage.Run();
+                    invokeCount = pilotStageResult.PerfectInvocationCount;
+                    measurements.AddRange(pilotStageResult.Measurements);
 
                     if (EvaluateOverhead)
                     {
-                        warmupStage.RunOverhead(invokeCount, UnrollFactor);
-                        idle = actualStage.RunOverhead(invokeCount, UnrollFactor);
+                        measurements.AddRange(warmupStage.RunOverhead(invokeCount, UnrollFactor));
+                        measurements.AddRange(actualStage.RunOverhead(invokeCount, UnrollFactor));
                     }
                 }
 
-                warmupStage.RunWorkload(invokeCount, UnrollFactor, Strategy);
+                measurements.AddRange(warmupStage.RunWorkload(invokeCount, UnrollFactor, Strategy));
             }
 
             Host.BeforeMainRun();
 
-            var main = actualStage.RunWorkload(invokeCount, UnrollFactor, forceSpecific: Strategy == RunStrategy.Monitoring);
+            measurements.AddRange(actualStage.RunWorkload(invokeCount, UnrollFactor, forceSpecific: Strategy == RunStrategy.Monitoring));
 
             Host.AfterMainRun();
 
-            (GcStats workGcHasDone, ThreadingStats threadingStats) = includeExtraStats
+            (GcStats workGcHasDone, ThreadingStats threadingStats, double exceptionFrequency) = includeExtraStats
                 ? GetExtraStats(new IterationData(IterationMode.Workload, IterationStage.Actual, 0, invokeCount, UnrollFactor))
-                : (GcStats.Empty, ThreadingStats.Empty);
+                : (GcStats.Empty, ThreadingStats.Empty, 0);
 
             if (EngineEventSource.Log.IsEnabled())
                 EngineEventSource.Log.BenchmarkStop(BenchmarkName);
 
             var outlierMode = TargetJob.ResolveValue(AccuracyMode.OutlierModeCharacteristic, Resolver);
 
-            return new RunResults(idle, main, outlierMode, workGcHasDone, threadingStats);
+            return new RunResults(measurements, outlierMode, workGcHasDone, threadingStats, exceptionFrequency);
         }
 
         public Measurement RunIteration(IterationData data)
@@ -162,12 +166,9 @@ namespace BenchmarkDotNet.Engines
             if (EngineEventSource.Log.IsEnabled())
                 EngineEventSource.Log.IterationStart(data.IterationMode, data.IterationStage, totalOperations);
 
-            Span<byte> stackMemory = randomizeMemory ? stackalloc byte[random.Next(32)] : Span<byte>.Empty;
-
-            // Measure
-            var clock = Clock.Start();
-            action(invokeCount / unrollFactor);
-            var clockSpan = clock.GetElapsed();
+            var clockSpan = randomizeMemory
+                ? MeasureWithRandomMemory(action, invokeCount / unrollFactor)
+                : Measure(action, invokeCount / unrollFactor);
 
             if (EngineEventSource.Log.IsEnabled())
                 EngineEventSource.Log.IterationStop(data.IterationMode, data.IterationStage, totalOperations);
@@ -183,13 +184,35 @@ namespace BenchmarkDotNet.Engines
             // Results
             var measurement = new Measurement(0, data.IterationMode, data.IterationStage, data.Index, totalOperations, clockSpan.GetNanoseconds());
             WriteLine(measurement.ToString());
-
-            Consume(stackMemory);
+            if (measurement.IterationStage == IterationStage.Jitting)
+                jittingMeasurements.Add(measurement);
 
             return measurement;
         }
 
-        private (GcStats, ThreadingStats) GetExtraStats(IterationData data)
+        // This is in a separate method, because stackalloc can affect code alignment,
+        // resulting in unexpected measurements on some AMD cpus,
+        // even if the stackalloc branch isn't executed. (#2366)
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private unsafe ClockSpan MeasureWithRandomMemory(Action<long> action, long invokeCount)
+        {
+            byte* stackMemory = stackalloc byte[random.Next(32)];
+            var clockSpan = Measure(action, invokeCount);
+            Consume(stackMemory);
+            return clockSpan;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private unsafe void Consume(byte* _) { }
+
+        private ClockSpan Measure(Action<long> action, long invokeCount)
+        {
+            var clock = Clock.Start();
+            action(invokeCount);
+            return clock.GetElapsed();
+        }
+
+        private (GcStats, ThreadingStats, double) GetExtraStats(IterationData data)
         {
             // we enable monitoring after main target run, for this single iteration which is executed at the end
             // so even if we enable AppDomain monitoring in separate process
@@ -199,23 +222,24 @@ namespace BenchmarkDotNet.Engines
             IterationSetupAction(); // we run iteration setup first, so even if it allocates, it is not included in the results
 
             var initialThreadingStats = ThreadingStats.ReadInitial(); // this method might allocate
+            var exceptionsStats = new ExceptionsStats(); // allocates
+            exceptionsStats.StartListening(); // this method might allocate
             var initialGcStats = GcStats.ReadInitial();
 
             WorkloadAction(data.InvokeCount / data.UnrollFactor);
 
+            exceptionsStats.Stop();
             var finalGcStats = GcStats.ReadFinal();
             var finalThreadingStats = ThreadingStats.ReadFinal();
 
             IterationCleanupAction(); // we run iteration cleanup after collecting GC stats
 
-            GcStats gcStats = (finalGcStats - initialGcStats).WithTotalOperations(data.InvokeCount * OperationsPerInvoke);
+            var totalOperationsCount = data.InvokeCount * OperationsPerInvoke;
+            GcStats gcStats = (finalGcStats - initialGcStats).WithTotalOperations(totalOperationsCount);
             ThreadingStats threadingStats = (finalThreadingStats - initialThreadingStats).WithTotalOperations(data.InvokeCount * OperationsPerInvoke);
 
-            return (gcStats, threadingStats);
+            return (gcStats, threadingStats, exceptionsStats.ExceptionsCount / (double)totalOperationsCount);
         }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private void Consume(in Span<byte> _) { }
 
         private void RandomizeManagedHeapMemory()
         {
@@ -256,7 +280,7 @@ namespace BenchmarkDotNet.Engines
 
         private static void EnableMonitoring()
         {
-            if (RuntimeInformation.IsMono) // Monitoring is not available in Mono, see http://stackoverflow.com/questions/40234948/how-to-get-the-number-of-allocated-bytes-in-mono
+            if (RuntimeInformation.IsOldMono) // Monitoring is not available in Mono, see http://stackoverflow.com/questions/40234948/how-to-get-the-number-of-allocated-bytes-in-mono
                 return;
 
             if (RuntimeInformation.IsFullFramework)

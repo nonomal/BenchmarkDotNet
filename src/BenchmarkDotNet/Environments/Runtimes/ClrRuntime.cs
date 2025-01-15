@@ -1,4 +1,5 @@
 ﻿using System;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Helpers;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Portability;
@@ -17,7 +18,7 @@ namespace BenchmarkDotNet.Environments
 
         public string Version { get; }
 
-        private ClrRuntime(RuntimeMoniker runtimeMoniker, string msBuildMoniker, string displayName, string version = null)
+        private ClrRuntime(RuntimeMoniker runtimeMoniker, string msBuildMoniker, string displayName, string? version = null)
             : base(runtimeMoniker, msBuildMoniker, displayName)
         {
             Version = version;
@@ -40,11 +41,11 @@ namespace BenchmarkDotNet.Environments
 
         public bool Equals(ClrRuntime other) => other != null && base.Equals(other) && Version == other.Version;
 
-        public override int GetHashCode() => base.GetHashCode() ^ (Version?.GetHashCode() ?? 0);
+        public override int GetHashCode() => HashCode.Combine(base.GetHashCode(), Version);
 
         internal static ClrRuntime GetCurrentVersion()
         {
-            if (!RuntimeInformation.IsWindows())
+            if (!OsDetector.IsWindows())
             {
                 throw new NotSupportedException(".NET Framework supports Windows OS only.");
             }

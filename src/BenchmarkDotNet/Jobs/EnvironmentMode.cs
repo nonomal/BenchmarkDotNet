@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using BenchmarkDotNet.Characteristics;
+using BenchmarkDotNet.Detectors;
 using BenchmarkDotNet.Environments;
+using BenchmarkDotNet.Phd;
 using BenchmarkDotNet.Portability;
 using JetBrains.Annotations;
 
@@ -14,8 +16,12 @@ namespace BenchmarkDotNet.Jobs
         public static readonly Characteristic<Runtime> RuntimeCharacteristic = CreateCharacteristic<Runtime>(nameof(Runtime));
         public static readonly Characteristic<IntPtr> AffinityCharacteristic = CreateCharacteristic<IntPtr>(nameof(Affinity));
         public static readonly Characteristic<GcMode> GcCharacteristic = CreateCharacteristic<GcMode>(nameof(Gc));
-        public static readonly Characteristic<IReadOnlyList<EnvironmentVariable>> EnvironmentVariablesCharacteristic = CreateCharacteristic<IReadOnlyList<EnvironmentVariable>>(nameof(EnvironmentVariables));
+
+        public static readonly Characteristic<IReadOnlyList<EnvironmentVariable>> EnvironmentVariablesCharacteristic =
+            CreateCharacteristic<IReadOnlyList<EnvironmentVariable>>(nameof(EnvironmentVariables));
+
         public static readonly Characteristic<Guid?> PowerPlanModeCharacteristic = CreateCharacteristic<Guid?>(nameof(PowerPlanMode));
+        public static readonly Characteristic<bool> LargeAddressAwareCharacteristic = CreateCharacteristic<bool>(nameof(LargeAddressAware));
 
         public static readonly EnvironmentMode LegacyJitX86 = new EnvironmentMode(nameof(LegacyJitX86), Jit.LegacyJit, Platform.X86).Freeze();
         public static readonly EnvironmentMode LegacyJitX64 = new EnvironmentMode(nameof(LegacyJitX64), Jit.LegacyJit, Platform.X64).Freeze();
@@ -59,7 +65,7 @@ namespace BenchmarkDotNet.Jobs
         /// <summary>
         /// Runtime
         /// </summary>
-        public Runtime Runtime
+        public Runtime? Runtime
         {
             get { return RuntimeCharacteristic[this]; }
             set { RuntimeCharacteristic[this] = value; }
@@ -97,6 +103,25 @@ namespace BenchmarkDotNet.Jobs
         }
 
         /// <summary>
+        /// Specifies that benchmark can handle addresses larger than 2 gigabytes.
+        /// <value>false: Benchmark uses the default (64-bit: enabled; 32-bit:disabled). This is the default.</value>
+        /// <value>true: Explicitly specify that benchmark can handle addresses larger than 2 gigabytes.</value>
+        /// </summary>
+        public bool LargeAddressAware
+        {
+            get => LargeAddressAwareCharacteristic[this];
+            set
+            {
+                if (value && !OsDetector.IsWindows())
+                {
+                    throw new NotSupportedException("LargeAddressAware is a Windows-specific concept.");
+                }
+
+                LargeAddressAwareCharacteristic[this] = value;
+            }
+        }
+
+        /// <summary>
         /// Adds the specified <paramref name="variable"/> to <see cref="EnvironmentVariables"/>.
         /// If <see cref="EnvironmentVariables"/> already contains a variable with the same key,
         /// it will be overriden.
@@ -113,5 +138,12 @@ namespace BenchmarkDotNet.Jobs
         }
 
         internal Runtime GetRuntime() => HasValue(RuntimeCharacteristic) ? Runtime : RuntimeInformation.GetCurrentRuntime();
+
+        public BdnEnvironment ToPhd() => new ()
+        {
+            Jit = HasValue(JitCharacteristic) ? Jit : null,
+            Runtime = HasValue(RuntimeCharacteristic) ? Runtime?.RuntimeMoniker : null,
+            Affinity = HasValue(AffinityCharacteristic) ? (int)Affinity : null
+        };
     }
 }

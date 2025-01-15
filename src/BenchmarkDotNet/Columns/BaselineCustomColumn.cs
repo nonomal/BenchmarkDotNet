@@ -18,7 +18,7 @@ namespace BenchmarkDotNet.Columns
             bool isBaseline = summary.IsBaseline(benchmarkCase);
 
             if (ResultsAreInvalid(summary, benchmarkCase, baseline))
-                return "?";
+                return MetricColumn.UnknownRepresentation;
 
             var baselineStat = summary[baseline].ResultStatistics;
             var baselineMetrics = summary[baseline].Metrics;
@@ -43,7 +43,7 @@ namespace BenchmarkDotNet.Columns
         public override string ToString() => ColumnName;
         public bool IsDefault(Summary summary, BenchmarkCase benchmarkCase) => false;
 
-        internal static bool ResultsAreInvalid(Summary summary, BenchmarkCase benchmarkCase, BenchmarkCase baseline)
+        internal static bool ResultsAreInvalid(Summary summary, BenchmarkCase benchmarkCase, BenchmarkCase? baseline)
         {
             return baseline == null ||
                    summary[baseline] == null ||

@@ -16,7 +16,7 @@ namespace BenchmarkDotNet.Loggers
         public static readonly Lazy<LinqPadLogger> lazyInstance = new Lazy<LinqPadLogger>(() =>
         {
             // Detect if being run from LINQPad; see https://github.com/dotnet/BenchmarkDotNet/issues/445#issuecomment-300723741
-            MethodInfo withStyle = null;
+            MethodInfo? withStyle = null;
             if (AppDomain.CurrentDomain.FriendlyName.StartsWith("LINQPad", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -82,6 +82,7 @@ namespace BenchmarkDotNet.Loggers
                 { LogKind.Statistic, "#00FFFF" },
                 { LogKind.Info, "#808000" },
                 { LogKind.Error, "#FF0000" },
+                { LogKind.Warning, "#FFFF00" },
                 { LogKind.Hint, "#008080" }
             };
 
@@ -95,6 +96,7 @@ namespace BenchmarkDotNet.Loggers
                 { LogKind.Statistic, "#008080" },
                 { LogKind.Info, "#808000" },
                 { LogKind.Error, "#FF0000" },
+                { LogKind.Warning, "#FFFF00" },
                 { LogKind.Hint, "#008080" }
             };
     }

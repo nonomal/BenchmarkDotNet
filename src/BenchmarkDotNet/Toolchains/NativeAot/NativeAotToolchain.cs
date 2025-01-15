@@ -1,5 +1,8 @@
 ﻿using System.Collections.Generic;
+using BenchmarkDotNet.Characteristics;
+using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.DotNetCli;
+using BenchmarkDotNet.Validators;
 
 namespace BenchmarkDotNet.Toolchains.NativeAot
 {
@@ -14,11 +17,35 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
             .ToToolchain();
 
         /// <summary>
-        /// compiled as net7.0, targets latest NativeAOT build from the .NET 7 feed: https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet7/nuget/v3/index.json
+        /// compiled as net7.0, targets latest NativeAOT build from the NuGet.org feed
         /// </summary>
         public static readonly IToolchain Net70 = CreateBuilder()
-            .UseNuGet("", "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet7/nuget/v3/index.json")
+            .UseNuGet("", "https://api.nuget.org/v3/index.json")
             .TargetFrameworkMoniker("net7.0")
+            .ToToolchain();
+
+        /// <summary>
+        /// compiled as net8.0, targets latest NativeAOT build from the NuGet.org feed: "https://api.nuget.org/v3/index.json"
+        /// </summary>
+        public static readonly IToolchain Net80 = CreateBuilder()
+            .UseNuGet("", "https://api.nuget.org/v3/index.json")
+            .TargetFrameworkMoniker("net8.0")
+            .ToToolchain();
+
+        /// <summary>
+        /// compiled as net9.0, targets latest NativeAOT build from the .NET 9 feed: https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet9/nuget/v3/index.json
+        /// </summary>
+        public static readonly IToolchain Net90 = CreateBuilder()
+            .UseNuGet("", "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet9/nuget/v3/index.json")
+            .TargetFrameworkMoniker("net9.0")
+            .ToToolchain();
+
+        /// <summary>
+        /// compiled as net10.0, targets latest NativeAOT build from the .NET 10 feed: https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json
+        /// </summary>
+        public static readonly IToolchain Net10_0 = CreateBuilder()
+            .UseNuGet("", "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json")
+            .TargetFrameworkMoniker("net10.0")
             .ToToolchain();
 
         internal NativeAotToolchain(string displayName,
@@ -36,10 +63,26 @@ namespace BenchmarkDotNet.Toolchains.NativeAot
                 new DotNetCliPublisher(customDotNetCliPath, GetExtraArguments(runtimeIdentifier)),
                 new Executor())
         {
+            CustomDotNetCliPath = customDotNetCliPath;
         }
+
+        internal string CustomDotNetCliPath { get; }
 
         public static NativeAotToolchainBuilder CreateBuilder() => NativeAotToolchainBuilder.Create();
 
         public static string GetExtraArguments(string runtimeIdentifier) => $"-r {runtimeIdentifier}";
+
+        public override IEnumerable<ValidationError> Validate(BenchmarkCase benchmarkCase, IResolver resolver)
+        {
+            foreach (var error in base.Validate(benchmarkCase, resolver))
+            {
+                yield return error;
+            }
+
+            foreach (var validationError in DotNetSdkValidator.ValidateCoreSdks(CustomDotNetCliPath, benchmarkCase))
+            {
+                yield return validationError;
+            }
+        }
     }
 }

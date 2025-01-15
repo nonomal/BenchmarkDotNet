@@ -77,6 +77,11 @@ namespace BenchmarkDotNet.Jobs
         public static Job WithGcAllowVeryLargeObjects(this Job job, bool value) => job.WithCore(j => j.Environment.Gc.AllowVeryLargeObjects = value);
 
         /// <summary>
+        /// Specifies that benchmark can handle addresses larger than 2 gigabytes.
+        /// </summary>
+        public static Job WithLargeAddressAware(this Job job, bool value = true) => job.WithCore(j => j.Environment.LargeAddressAware = value);
+
+        /// <summary>
         /// Put segments that should be deleted on a standby list for future use instead of releasing them back to the OS
         /// <remarks>The default is false</remarks>
         /// </summary>
@@ -310,7 +315,7 @@ namespace BenchmarkDotNet.Jobs
         /// <param name="key">The key of the new environment variable</param>
         /// <param name="value">The value of the new environment variable</param>
         /// <returns>The new job with additional environment variable</returns>
-        public static Job WithEnvironmentVariable(this Job job, [NotNull] string key, [NotNull] string value)
+        public static Job WithEnvironmentVariable(this Job job, string key, string value)
             => job.WithEnvironmentVariable(new EnvironmentVariable(key, value));
 
         /// <summary>
@@ -334,7 +339,7 @@ namespace BenchmarkDotNet.Jobs
         /// <param name="source">(optional)Indicate the URI of the NuGet package source to use during the restore operation.</param>
         /// <param name="prerelease">(optional)Allows prerelease packages to be installed.</param>
         /// <returns></returns>
-        public static Job WithNuGet(this Job job, string packageName, string packageVersion = null, Uri source = null, bool prerelease = false) =>
+        public static Job WithNuGet(this Job job, string packageName, string? packageVersion = null, Uri? source = null, bool prerelease = false) =>
             job.WithCore(j => j.Infrastructure.NuGetReferences =
                 new NuGetReferenceList(j.Infrastructure.NuGetReferences ?? Array.Empty<NuGetReference>())
                     {
@@ -431,5 +436,10 @@ namespace BenchmarkDotNet.Jobs
             updateCallback(newJob);
             return newJob;
         }
+
+        internal static bool HasDynamicBuildCharacteristic(this Job job) =>
+            job.HasValue(InfrastructureMode.NuGetReferencesCharacteristic)
+            || job.HasValue(InfrastructureMode.BuildConfigurationCharacteristic)
+            || job.HasValue(InfrastructureMode.ArgumentsCharacteristic);
     }
 }

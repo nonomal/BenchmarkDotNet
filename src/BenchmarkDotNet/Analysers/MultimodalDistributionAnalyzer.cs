@@ -2,7 +2,6 @@
 using System.Globalization;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Reports;
-using JetBrains.Annotations;
 using Perfolizer.Mathematics.Multimodality;
 
 namespace BenchmarkDotNet.Analysers
@@ -21,7 +20,7 @@ namespace BenchmarkDotNet.Analysers
             if (statistics == null || statistics.N < EngineResolver.DefaultMinWorkloadIterationCount)
                 yield break;
 
-            double mValue = MValueCalculator.Calculate(statistics.OriginalValues);
+            double mValue = MValueCalculator.Calculate(statistics.Sample.Values);
             if (mValue > 4.2)
                 yield return Create("is multimodal", mValue, report, summary.GetCultureInfo());
             else if (mValue > 3.2)
@@ -30,8 +29,7 @@ namespace BenchmarkDotNet.Analysers
                 yield return Create("can have several modes", mValue, report, summary.GetCultureInfo());
         }
 
-        [NotNull]
-        private Conclusion Create([NotNull] string kind, double mValue, [CanBeNull] BenchmarkReport report, CultureInfo cultureInfo)
+        private Conclusion Create(string kind, double mValue, BenchmarkReport? report, CultureInfo cultureInfo)
             => CreateWarning($"It seems that the distribution {kind} (mValue = {mValue.ToString("0.##", cultureInfo)})", report);
     }
 }
